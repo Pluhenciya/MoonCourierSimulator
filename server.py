@@ -70,11 +70,62 @@ UPGRADES = [
     {"key": "up_speed", "label": "Скорость",         "prop": "speed_kmh","delta": 4,  "icon": "⚡", "costs": [30, 55, 90, 140]},
 ]
 
-# Покупаемые модели флота
-MODELS = {
-    "hunter": {"name": "Hunter", "model": "Scout",     "cap_kg": 55, "batt": 95, "speed_kmh": 55, "base_e": 0.9, "kw": 0.006, "cost": 220, "min_done": 2},
-    "mammoth":{"name": "Mammoth","model": "Heavy Lifter","cap_kg": 420,"batt": 220,"speed_kmh": 14, "base_e": 1.9, "kw": 0.0015, "cost": 380, "min_done": 4},
-}
+# Витрина верфи: модели генерируются случайно и растут с прогрессом игрока
+SHOP_SIZE = 4
+SHOP_REFRESH_MIN = (35, 70)      # игровые минуты между ротациями слота
+MODEL_NAMES = ["Hunter", "Mammoth", "Viper", "Titan", "Swift", "Boulder", "Nomad", "Ranger",
+               "Comet", "Drake", "Pegasus", "Raven", "Storm", "Echo", "Onyx"]
+MODEL_TYPES = ["Scout", "Heavy Lifter", "Fast Courier", "Freighter", "Lunar Truck",
+               "Courier", "Hauler", "Racer", "Workhorse", "Explorer"]
+
+
+def roll_model(total_done):
+    """Генерирует случайную модель для витрины. Чем больше доставок — тем сильнее модели."""
+    tier = min(8, total_done // 3)
+    cap_kg = RAND.randint(45, 90) + tier * RAND.randint(6, 14)
+    batt = RAND.randint(90, 125) + tier * RAND.randint(5, 12)
+    if cap_kg > 150:
+        speed_kmh = RAND.randint(12, 20)
+    elif cap_kg > 100:
+        speed_kmh = RAND.randint(18, 28)
+    else:
+        speed_kmh = RAND.randint(26, 45)
+    cost = int(cap_kg * 0.8 + batt * 0.6 + speed_kmh * 2)
+    cost = max(120, int(cost / 10) * 10)
+    min_done = max(0, (cost - 140) // 70)   # чем дороже — тем позже доступна
+    return {
+        "id": gen_id("shop"),
+        "name": RAND.choice(MODEL_NAMES),
+        "model": RAND.choice(MODEL_TYPES),
+        "cap_kg": cap_kg,
+        "batt": batt,
+        "speed_kmh": speed_kmh,
+        "base_e": round(0.9 + cap_kg / 350, 2),
+        "kw": round(max(0.0015, 0.006 - cap_kg / 90000), 4),
+        "cost": cost,
+        "min_done": min_done,
+    }
+
+
+def shop_init():
+    if not STATE.get("shop"):
+        total = sum(x["done"] for x in DB["rovers.json"].values())
+        STATE["shop"] = [roll_model(total) for _ in range(SHOP_SIZE)]
+        STATE["shop_next"] = STATE["minute_total"] + RAND.randint(*SHOP_REFRESH_MIN)
+
+
+def shop_tick(dt_min):
+    """Периодически заменяет один слот витрины свежей моделью."""
+    if STATE["minute_total"] < STATE.get("shop_next", 1 << 30):
+        return
+    total = sum(x["done"] for x in DB["rovers.json"].values())
+    i = RAND.randrange(len(STATE["shop"]))
+    old = STATE["shop"][i]
+    STATE["shop"][i] = roll_model(total)
+    log_event("mission", "Верфь обновила витрину: «%s %s» (%.0f кг, %d км/ч) — %d₵. Осталась: «%s»."
+              % (STATE["shop"][i]["name"], STATE["shop"][i]["model"], STATE["shop"][i]["cap_kg"],
+                 STATE["shop"][i]["speed_kmh"], STATE["shop"][i]["cost"], old["name"]))
+    STATE["shop_next"] = STATE["minute_total"] + RAND.randint(*SHOP_REFRESH_MIN)
 
 # ----------------------------------------------------------------------------
 # Хранилище (JSON-файлы)
@@ -259,6 +310,7 @@ def seed_game():
         }
     DB["rovers.json"] = rovers
     DB["state.json"] = STATE
+    shop_init()
     seed_orders()
 
 
@@ -342,6 +394,7 @@ def simulate_step(dt_min):
     tick_deliveries(dt_min)
     recharge_rovers(dt_min)
     check_orders_expiry()
+    shop_tick(dt_min)
     check_day_end()
     if STATE["rating"] <= 0 and not STATE["gameover"]:
         STATE["gameover"] = True
@@ -381,8 +434,7 @@ def estimate_mission(order, rover):
         return False, "Зона заказчика перекрыта бурей. Доставка невозможна сейчас.", None
     if order["weight_kg"] > r["cap_kg"]:
         return False, "Вес груза (%.0f кг) превышает грузоподъёмность ровера (%.0f кг)." % (order["weight_kg"], r["cap_kg"]), None
-    cfg = dict(ROVERS.get(rover) or MODELS.get(rover) or {})
-    cfg["speed_kmh"] = r["speed_kmh"]      # учитываем улучшенную скорость
+    cfg = {"speed_kmh": r["speed_kmh"], "base_e": r.get("base_e", 1.2), "kw": r.get("kw", 0.004)}
     prof = path_profile(r["x"], r["y"], OUTPOSTS[order["outpost"]]["x"], OUTPOSTS[order["outpost"]]["y"],
                         order["weight_kg"], cfg)
     out_km, out_min, out_e = prof
@@ -644,20 +696,20 @@ def action_cmd(name, payload):
         save_all()
         return {"ok": True}
     if name == "buy_rover":
-        mid = payload.get("model_id")
-        m = MODELS.get(mid)
-        if not m:
-            return {"ok": False, "error": "Неизвестная модель."}
-        if mid in DB["rovers.json"]:
-            return {"ok": False, "error": "Эта модель уже в вашем флоте."}
+        shop_id = payload.get("shop_id")
+        slot = next((s for s in STATE["shop"] if s["id"] == shop_id), None)
+        if not slot:
+            return {"ok": False, "error": "Этой модели больше нет в продаже — витрина обновилась."}
         total_done = sum(x["done"] for x in DB["rovers.json"].values())
-        if total_done < m["min_done"]:
-            return {"ok": False, "error": "Доступно после %d выполненных доставок (сейчас %d)." % (m["min_done"], total_done)}
-        if m["cost"] > STATE["credits"]:
-            return {"ok": False, "error": "Не хватает кредитов (%d нужен, есть %d)." % (m["cost"], STATE["credits"])}
-        STATE["credits"] -= m["cost"]
-        DB["rovers.json"][mid] = {
-            "id": mid, "name": m["name"], "model": m["model"],
+        if total_done < slot["min_done"]:
+            return {"ok": False, "error": "Доступно после %d выполненных доставок (сейчас %d)." % (slot["min_done"], total_done)}
+        if slot["cost"] > STATE["credits"]:
+            return {"ok": False, "error": "Не хватает кредитов (%d нужен, есть %d)." % (slot["cost"], STATE["credits"])}
+        STATE["credits"] -= slot["cost"]
+        m = slot
+        rid = gen_id("rover")
+        DB["rovers.json"][rid] = {
+            "id": rid, "name": m["name"], "model": m["model"],
             "cap_kg": m["cap_kg"], "batt": m["batt"], "batt_max": m["batt"],
             "speed_kmh": m["speed_kmh"], "base_e": m["base_e"], "kw": m["kw"],
             "x": OUTPOSTS["base"]["x"], "y": OUTPOSTS["base"]["y"],
@@ -665,6 +717,8 @@ def action_cmd(name, payload):
             "done": 0, "failed": 0, "earned": 0,
             "up_kg": 0, "up_batt": 0, "up_speed": 0,
         }
+        STATE["shop"].remove(slot)
+        STATE["shop"].append(roll_model(total_done))  # витрина не пустеет
         log_event("mission", "Во флот прибыл новый ровер %s «%s» (%d кг, %d км/ч). −%d₵" %
                   (m["name"], m["model"], m["cap_kg"], m["speed_kmh"], m["cost"]))
         save_all()
@@ -783,11 +837,7 @@ def public_state():
     orders = sorted(DB["orders.json"].values(), key=lambda o: o["expires_at"])
     storms = {k: int(v) for k, v in STATE["storms"].items() if v > STATE["minute_total"]}
     total_done = sum(x["done"] for x in DB["rovers.json"].values())
-    fleet_shop = {
-        mid: dict(m, owned=mid in DB["rovers.json"], min_done=MODELS[mid]["min_done"],
-                  unlocked=total_done >= MODELS[mid]["min_done"])
-        for mid, m in MODELS.items()
-    }
+    fleet_shop = [dict(s, unlocked=total_done >= s["min_done"]) for s in STATE["shop"]]
     return {
         "ok": True,
         "time": {
@@ -832,6 +882,8 @@ def main(port=8000):
         if STATE and STATE.get("gameover"):
             log_event("game", "Предыдущая партия была завершена — база развёрнута заново.")
             reset_data()
+        else:
+            shop_init()  # витрина для старых сейвов
     t = threading.Thread(target=sim_loop, daemon=True)
     t.start()
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)

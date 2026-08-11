@@ -243,16 +243,15 @@ function showFleet() {
     html += `</div>`;
   }
 
-  html += `<div class="f-h">Верфь <span class="fr">новые модели</span></div>`;
-  for (const [mid, m] of Object.entries(d.fleet_shop)) {
-    const owned = m.owned;
+  html += `<div class="f-h">Верфь <span class="fr">новые модели · витрина обновляется</span></div>`;
+  for (const m of d.fleet_shop) {
     html += `
       <div class="f-shop">
         <div class="nm">${m.name} <small>· ${m.model}</small></div>
         <div class="dst">груз ${m.cap_kg} кг · батарея ${m.batt} Вт·ч · скорость ${m.speed_kmh} км/ч</div>
         <div class="sp"><span>стоимость <b>${m.cost}₵</b></span><span>нужно доставок <b>${m.min_done}</b></span></div>
-        <button class="buy ${owned || !m.unlocked ? "lock" : "ok"}" data-fa="buy" data-m="${mid}" ${owned || !m.unlocked ? "disabled" : ""}>
-          ${owned ? "В вашем флоте ✓" : m.unlocked ? `Купить за ${m.cost}₵` : `Доступно после ${m.min_done} доставок`}
+        <button class="buy ${m.unlocked ? "ok" : "lock"}" data-fa="buy" data-m="${m.id}" ${m.unlocked ? "" : "disabled"}>
+          ${m.unlocked ? `Купить за ${m.cost}₵` : `Доступно после ${m.min_done} доставок`}
         </button>
       </div>`;
   }
@@ -264,7 +263,7 @@ function showFleet() {
     b.addEventListener("click", async () => {
       const res = b.dataset.fa === "upgrade"
         ? await api("upgrade", { rover_id: b.dataset.r, stat: b.dataset.u })
-        : await api("buy_rover", { model_id: b.dataset.m });
+        : await api("buy_rover", { shop_id: b.dataset.m });
       if (res && !res.ok) {
         document.querySelector("#modal .f-h")?.insertAdjacentHTML("afterend", `<div class="err">${res.error}</div>`);
         return;
