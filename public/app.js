@@ -177,48 +177,55 @@ function renderLog(d) {
 }
 
 /* -------- карта -------- */
-let stars = [];
+let stars = [], bgCanvas = null, bgKey = "";
 function initStars(W, H) {
   if (stars.length) return;
   for (let i = 0; i < 90; i++) stars.push({ x: Math.random(), y: Math.random(), r: Math.random() * 1.3 + 0.3, a: Math.random() * 0.5 + 0.25 });
   stars.size = { W, H };
+}
+function buildBg(d, W, H) {
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const cx = cv.getContext("2d");
+  cx.fillStyle = "#05070d"; cx.fillRect(0, 0, W, H);
+  const textureOK = moonTex.complete && moonTex.naturalWidth > 0;
+  if (textureOK) {
+    const sc = Math.max(W / moonTex.naturalWidth, H / moonTex.naturalHeight);
+    const tw = moonTex.naturalWidth * sc, th = moonTex.naturalHeight * sc;
+    cx.drawImage(moonTex, (W - tw) / 2, (H - th) / 2, tw, th);
+    cx.fillStyle = "rgba(4,7,14,.4)"; cx.fillRect(0, 0, W, H);
+  }
+  stars.forEach((s) => { cx.globalAlpha = s.a; cx.fillStyle = "#cdd9ef"; cx.beginPath(); cx.arc(s.x * W, s.y * H, s.r, 0, 7); cx.fill(); });
+  cx.globalAlpha = 1;
+  const S = Math.min(W / 1000, H / 700);
+  const ox = (W - 1000 * S) / 2, oy = (H - 700 * S) / 2;
+  const px2 = (x) => x * S + ox, py2 = (y) => y * S + oy;
+  if (!textureOK) {
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    cx.fillStyle = "rgba(255,255,255,.018)";
+    for (let i = 0; i < 24; i++) {
+      const cxp = px2(50 + rnd() * 900), cyp = py2(50 + rnd() * 600), cr = 8 + rnd() * 26;
+      cx.beginPath(); cx.arc(cxp, cyp, cr, 0, 7); cx.fill();
+    }
+  }
+  drawBase(cx, px2(d.outposts.base.x), py2(d.outposts.base.y), S);
+  return cv;
 }
 function renderMap(d) {
   const canvas = $("map");
   const W = canvas.parentElement.clientWidth, H = canvas.parentElement.clientHeight;
   if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
   initStars(W, H);
+  const key = W + "x" + H;
+  if (!bgCanvas || bgKey !== key) { bgCanvas = buildBg(d, W, H); bgKey = key; }
   const ctx = canvas.getContext("2d");
+  ctx.drawImage(bgCanvas, 0, 0);
   const S = Math.min(W / 1000, H / 700);
   const ox = (W - 1000 * S) / 2, oy = (H - 700 * S) / 2;
   const px = (x) => x * S + ox, py = (y) => y * S + oy;
   const hour = Math.floor(d.time.minute_total) % 1440;
   const night = hour < 360 || hour >= 1200;
-
-  // фон: текстура Луны (или процедурный запасной вариант)
-  const textureOK = moonTex.complete && moonTex.naturalWidth > 0;
-  ctx.fillStyle = "#05070d";
-  ctx.fillRect(0, 0, W, H);
-  if (textureOK) {
-    const sc = Math.max(W / moonTex.naturalWidth, H / moonTex.naturalHeight);
-    const tw = moonTex.naturalWidth * sc, th = moonTex.naturalHeight * sc;
-    ctx.drawImage(moonTex, (W - tw) / 2, (H - th) / 2, tw, th);
-    ctx.fillStyle = "rgba(4,7,14,.4)";
-    ctx.fillRect(0, 0, W, H);
-  }
-  stars.forEach((s) => { ctx.globalAlpha = s.a; ctx.fillStyle = "#cdd9ef"; ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, 7); ctx.fill(); });
-  ctx.globalAlpha = 1;
-
-  // кратеры (мягкие), только при процедурном фоне
-  if (!textureOK) {
-    let seed = 7;
-    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    ctx.fillStyle = "rgba(255,255,255,.018)";
-    for (let i = 0; i < 24; i++) {
-      const cx = px(50 + rnd() * 900), cy = py(50 + rnd() * 600), cr = 8 + rnd() * 26;
-      ctx.beginPath(); ctx.arc(cx, cy, cr, 0, 7); ctx.fill();
-    }
-  }
 
   // зоны
   d.zone_order.forEach((zid) => {
@@ -241,9 +248,6 @@ function renderMap(d) {
     ctx.textAlign = "center";
     ctx.fillText(z.name + (storm ? " · буря" : ""), cx, cy);
   });
-
-  // база
-  drawBase(ctx, px(d.outposts.base.x), py(d.outposts.base.y), S);
 
   // заказы
   const selO = d.orders.find((x) => x.id === state.selOrder);

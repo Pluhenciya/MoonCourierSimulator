@@ -57,7 +57,7 @@ const TUT = [
   },
 ];
 
-const tut = { active: false, step: 0, started: false, pending: false };
+const tut = { active: false, step: 0, started: false, pending: false, scrollStep: -1 };
 
 function startTutorial() {
   tut.active = true; tut.step = 0; tut.pending = false;
@@ -96,7 +96,10 @@ function tutRender() {
   clearTutGlow();
   if (s.target) {
     const el = findTutTarget(s.target);
-    if (el) { el.classList.add("tut-glow"); el.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+    if (el) {
+      el.classList.add("tut-glow");
+      if (tut.scrollStep !== tut.step) { tut.scrollStep = tut.step; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+    }
   }
 }
 function findTutTarget(sel) {
