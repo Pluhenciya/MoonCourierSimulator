@@ -119,8 +119,7 @@ python desktop.py
 
 | Ассет | Источник | Лицензия |
 |---|---|---|
-| `public/assets/moon_texture.jpg` | текстура Луны, [Solar System Scope](https://www.solarsystemscope.com/textures) | **CC-BY 4.0** (атрибуция: © Solar System Scope, 2011) |
 | `public/assets/exo-*.woff2` | шрифт Exo 2 | **SIL Open Font License 1.1** |
 | `public/assets/orbitron-lat.woff2` | шрифт Orbitron | **SIL Open Font License 1.1** |
 
-Шрифты и текстура вложены в репозиторий — игра работает офлайн. Если текстура не загрузилась, карта рендерится процедурно (кратеры, градиент).
+Шрифты вложены в репозиторий — игра работает офлайн. Карта Луны рисуется процедурно (космос, моря, кратеры со светом, виньетирование) — без внешних ассетов.

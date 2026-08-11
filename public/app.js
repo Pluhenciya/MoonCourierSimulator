@@ -1,9 +1,6 @@
 /* Moon Courier Simulator — клиент (редизайн) */
 "use strict";
 
-const moonTex = new Image();
-moonTex.src = "/static/assets/moon_texture.jpg";
-
 const $ = (id) => document.getElementById(id);
 const state = { selOrder: null, selRover: null, data: null, roverPrev: {} };
 window.tutMap = null; // цель подсветки обучалки на карте: {kind:"base"|"order"|"rover", id?}
@@ -198,28 +195,75 @@ function buildBg(d, W, H) {
   const cv = document.createElement("canvas");
   cv.width = W; cv.height = H;
   const cx = cv.getContext("2d");
-  cx.fillStyle = "#05070d"; cx.fillRect(0, 0, W, H);
-  const textureOK = moonTex.complete && moonTex.naturalWidth > 0;
-  if (textureOK) {
-    const sc = Math.max(W / moonTex.naturalWidth, H / moonTex.naturalHeight);
-    const tw = moonTex.naturalWidth * sc, th = moonTex.naturalHeight * sc;
-    cx.drawImage(moonTex, (W - tw) / 2, (H - th) / 2, tw, th);
-    cx.fillStyle = "rgba(4,7,14,.4)"; cx.fillRect(0, 0, W, H);
-  }
+
+  // глубокий космос
+  const space = cx.createLinearGradient(0, 0, 0, H);
+  space.addColorStop(0, "#04060c");
+  space.addColorStop(0.55, "#070b16");
+  space.addColorStop(1, "#04060c");
+  cx.fillStyle = space; cx.fillRect(0, 0, W, H);
+
+  // звёзды
   stars.forEach((s) => { cx.globalAlpha = s.a; cx.fillStyle = "#cdd9ef"; cx.beginPath(); cx.arc(s.x * W, s.y * H, s.r, 0, 7); cx.fill(); });
   cx.globalAlpha = 1;
+
   const S = Math.min(W / 1000, H / 700);
   const ox = (W - 1000 * S) / 2, oy = (H - 700 * S) / 2;
   const px2 = (x) => x * S + ox, py2 = (y) => y * S + oy;
-  if (!textureOK) {
-    let seed = 7;
-    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    cx.fillStyle = "rgba(255,255,255,.018)";
-    for (let i = 0; i < 24; i++) {
-      const cxp = px2(50 + rnd() * 900), cyp = py2(50 + rnd() * 600), cr = 8 + rnd() * 26;
-      cx.beginPath(); cx.arc(cxp, cyp, cr, 0, 7); cx.fill();
-    }
-  }
+
+  // поверхность Луны: мягкий рельеф
+  const surf = cx.createRadialGradient(W * 0.5, H * 0.42, 60, W * 0.5, H * 0.42, Math.max(W, H) * 0.75);
+  surf.addColorStop(0, "#2a3856");
+  surf.addColorStop(0.55, "#1a2438");
+  surf.addColorStop(1, "#0b1120");
+  cx.fillStyle = surf; cx.fillRect(0, 0, W, H);
+
+  // лунные моря — большие тёмные пятна
+  const seas = [[0.28, 0.32, 0.22], [0.68, 0.25, 0.18], [0.78, 0.62, 0.25], [0.35, 0.72, 0.17], [0.55, 0.45, 0.12]];
+  seas.forEach(([sx, sy, sr]) => {
+    const g = cx.createRadialGradient(W * sx, H * sy, 5, W * sx, H * sy, H * sr);
+    g.addColorStop(0, "rgba(8,14,28,.55)");
+    g.addColorStop(1, "rgba(8,14,28,0)");
+    cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+  });
+
+  // лунный свет (блик сверху слева)
+  const light = cx.createRadialGradient(W * 0.3, H * 0.2, 20, W * 0.3, H * 0.2, W * 0.9);
+  light.addColorStop(0, "rgba(190,210,240,.10)");
+  light.addColorStop(1, "rgba(190,210,240,0)");
+  cx.fillStyle = light; cx.fillRect(0, 0, W, H);
+
+  // кратеры: тень (дно) + светлая кромка со стороны света (верх слева)
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const crater = (cxp, cyp, cr) => {
+    cx.beginPath(); cx.arc(cxp, cyp, cr, 0, 7);
+    cx.fillStyle = "rgba(6,11,22,.42)"; cx.fill();
+    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.82, 0, 7);
+    cx.fillStyle = "rgba(3,6,14,.35)"; cx.fill();
+    cx.lineWidth = Math.max(1.2, cr * 0.16);
+    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.9, Math.PI, Math.PI * 1.5); // тёмная кромка (низ справа)
+    cx.strokeStyle = "rgba(4,8,18,.5)"; cx.stroke();
+    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.94, Math.PI * 1.5, Math.PI * 2.05); // светлая кромка (верх слева)
+    cx.strokeStyle = "rgba(190,210,240,.22)"; cx.stroke();
+  };
+  const craters = [
+    [100, 110, 30], [250, 90, 16], [400, 60, 42], [620, 100, 22], [800, 70, 34],
+    [930, 140, 18], [60, 260, 20], [300, 240, 12], [520, 200, 28], [730, 230, 15],
+    [880, 300, 40], [140, 400, 26], [330, 380, 34], [560, 360, 14], [690, 420, 30],
+    [860, 500, 20], [240, 540, 40], [450, 520, 24], [620, 560, 16], [780, 590, 30],
+    [120, 620, 14], [380, 640, 22], [900, 620, 26], [520, 660, 12],
+  ];
+  craters.forEach(([a, b, c]) => crater(px2(a), py2(b), c * S));
+  // мелкие кратеры
+  for (let i = 0; i < 40; i++) crater(px2(30 + rnd() * 940), py2(30 + rnd() * 640), (2 + rnd() * 5) * S);
+
+  // слабое виньетирование
+  const vin = cx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+  vin.addColorStop(0, "rgba(0,0,0,0)");
+  vin.addColorStop(1, "rgba(0,0,0,.45)");
+  cx.fillStyle = vin; cx.fillRect(0, 0, W, H);
+
   drawBase(cx, px2(d.outposts.base.x), py2(d.outposts.base.y), S);
   return cv;
 }
