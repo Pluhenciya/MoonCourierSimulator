@@ -12,6 +12,7 @@ import json
 import math
 import os
 import random
+import sys
 import threading
 import time
 import datetime
@@ -141,12 +142,23 @@ def _load(name, default):
 
 
 def _save(name, data):
+    """Сохраняет файл. OneDrive может держать файл — пробуем повторно и отступаем к прямой записи."""
     os.makedirs(DATA_DIR, exist_ok=True)
     path = os.path.join(DATA_DIR, name)
     tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
+    for attempt in range(3):
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
+            return
+        except OSError:
+            time.sleep(0.3)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except OSError:
+        pass
 
 
 DB = {
@@ -913,14 +925,20 @@ def sim_loop():
     while True:
         dt_real = 0.25
         time.sleep(dt_real)
-        dt_min = GAME_MIN_PER_SEC * dt_real * (FF_MULT if STATE and STATE["ff"] else 1.0)
-        if STATE and not STATE["gameover"] and not STATE.get("paused"):
-            with lock:
-                simulate_step(dt_min)
-                now = time.time()
-                if now - last_save >= 1.0:
-                    save_all()
-                    last_save = now
+        try:
+            dt_min = GAME_MIN_PER_SEC * dt_real * (FF_MULT if STATE and STATE["ff"] else 1.0)
+            if STATE and not STATE["gameover"] and not STATE.get("paused"):
+                with lock:
+                    simulate_step(dt_min)
+                    now = time.time()
+                    if now - last_save >= 1.0:
+                        save_all()
+                        last_save = now
+        except Exception as e:
+            try:
+                sys.stderr.write("sim_loop error: %r\n" % (e,))
+            except Exception:
+                pass
 
 
 # ----------------------------------------------------------------------------
@@ -940,6 +958,8 @@ MIME = {
 
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body=b"", ctype="application/json; charset=utf-8"):
+        if isinstance(body, str):
+            body = body.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
