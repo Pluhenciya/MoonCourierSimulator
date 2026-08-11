@@ -61,11 +61,14 @@ const tut = { active: false, step: 0, started: false, pending: false, scrollStep
 
 function startTutorial() {
   tut.active = true; tut.step = 0; tut.pending = false;
+  api("pause", { on: true });
   tutRender();
 }
 function closeTutorial() {
   tut.active = false;
+  api("pause", { on: false });
   window.tutMap = null;
+  window.tutMapScreen = null;
   clearTutGlow();
   $("tut").classList.add("hidden");
 }
@@ -94,6 +97,7 @@ function tutRender() {
   const next = $("tut-next");
   next.disabled = !canProceed(s);
   next.textContent = s.btn || "Дальше →";
+  next.hidden = !!(s.need || s.auto); // на шагах-действиях кнопки нет — переход сам после действия
   clearTutGlow();
   if (s.target) {
     const el = findTutTarget(s.target);
@@ -181,17 +185,17 @@ function tutMapFor(d) {
 function tutTick() {
   if (!tut.active) return;
   const s = tutStep();
-  if (s.auto && canProceed(s)) {
+  const stepDone = canProceed(s);
+  if ((s.auto || s.need) && stepDone) {
     if (!tut.pending) {
       tut.pending = true;
-      setTimeout(() => { if (tut.active && tut.pending) { tut.step++; tut.pending = false; tutRender(); } }, 1500);
+      setTimeout(() => { if (tut.active && tut.pending) { tut.step++; tut.pending = false; tutRender(); } }, 1400);
     }
-  } else if (!canProceed(s)) {
+  } else if (!stepDone) {
     tut.pending = false;
   }
   tutRender();
 }
-
 $("tut-next").addEventListener("click", () => {
   if (!canProceed(tutStep())) return;
   if (tut.step >= TUT.length - 1) { closeTutorial(); return; }
