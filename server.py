@@ -256,6 +256,7 @@ def seed_game():
             "up_kg": 0, "up_batt": 0, "up_speed": 0,
         }
     DB["rovers.json"] = rovers
+    DB["state.json"] = STATE
     seed_orders()
 
 
@@ -572,6 +573,9 @@ def check_day_end():
 # ----------------------------------------------------------------------------
 
 def action_cmd(name, payload):
+    if name == "reset":
+        reset_data()
+        return {"ok": True}
     if STATE.get("gameover"):
         return {"ok": False, "error": "Игра окончена. Нажмите «Новая игра»."}
     if name == "launch":
@@ -658,9 +662,6 @@ def action_cmd(name, payload):
         log_event("mission", "Во флот прибыл новый ровер %s «%s» (%d кг, %d км/ч). −%d₵" %
                   (m["name"], m["model"], m["cap_kg"], m["speed_kmh"], m["cost"]))
         save_all()
-        return {"ok": True}
-    if name == "reset":
-        reset_data()
         return {"ok": True}
     return {"ok": False, "error": "Неизвестная команда."}
 
@@ -814,10 +815,16 @@ def public_state():
 # ----------------------------------------------------------------------------
 
 def main(port=8000):
+    global STATE
     load_all()
     if DB["rovers.json"] is None or DB["state.json"] is None:
         seed_game()
         save_all()
+    else:
+        STATE = DB["state.json"]
+        if STATE and STATE.get("gameover"):
+            log_event("game", "Предыдущая партия была завершена — база развёрнута заново.")
+            reset_data()
     t = threading.Thread(target=sim_loop, daemon=True)
     t.start()
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)

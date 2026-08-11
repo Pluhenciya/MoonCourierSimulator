@@ -1,6 +1,9 @@
 /* Moon Courier Simulator — клиент (редизайн) */
 "use strict";
 
+const moonTex = new Image();
+moonTex.src = "/static/assets/moon_texture.jpg";
+
 const $ = (id) => document.getElementById(id);
 const state = { selOrder: null, selRover: null, data: null };
 
@@ -192,19 +195,29 @@ function renderMap(d) {
   const hour = Math.floor(d.time.minute_total) % 1440;
   const night = hour < 360 || hour >= 1200;
 
-  // звёзды
+  // фон: текстура Луны (или процедурный запасной вариант)
+  const textureOK = moonTex.complete && moonTex.naturalWidth > 0;
   ctx.fillStyle = "#05070d";
   ctx.fillRect(0, 0, W, H);
+  if (textureOK) {
+    const sc = Math.max(W / moonTex.naturalWidth, H / moonTex.naturalHeight);
+    const tw = moonTex.naturalWidth * sc, th = moonTex.naturalHeight * sc;
+    ctx.drawImage(moonTex, (W - tw) / 2, (H - th) / 2, tw, th);
+    ctx.fillStyle = "rgba(4,7,14,.4)";
+    ctx.fillRect(0, 0, W, H);
+  }
   stars.forEach((s) => { ctx.globalAlpha = s.a; ctx.fillStyle = "#cdd9ef"; ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, 7); ctx.fill(); });
   ctx.globalAlpha = 1;
 
-  // кратеры (мягкие)
-  let seed = 7;
-  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  ctx.fillStyle = "rgba(255,255,255,.018)";
-  for (let i = 0; i < 24; i++) {
-    const cx = px(50 + rnd() * 900), cy = py(50 + rnd() * 600), cr = 8 + rnd() * 26;
-    ctx.beginPath(); ctx.arc(cx, cy, cr, 0, 7); ctx.fill();
+  // кратеры (мягкие), только при процедурном фоне
+  if (!textureOK) {
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    ctx.fillStyle = "rgba(255,255,255,.018)";
+    for (let i = 0; i < 24; i++) {
+      const cx = px(50 + rnd() * 900), cy = py(50 + rnd() * 600), cr = 8 + rnd() * 26;
+      ctx.beginPath(); ctx.arc(cx, cy, cr, 0, 7); ctx.fill();
+    }
   }
 
   // зоны
@@ -224,7 +237,7 @@ function renderMap(d) {
     const cx = px(z.poly.reduce((a, p) => a + p[0], 0) / z.poly.length);
     const cy = py(z.poly.reduce((a, p) => a + p[1], 0) / z.poly.length);
     ctx.fillStyle = storm ? "rgba(248,113,113,.9)" : "rgba(222,232,246,.4)";
-    ctx.font = "600 11px Segoe UI";
+    ctx.font = "600 11px Exo 2, Segoe UI";
     ctx.textAlign = "center";
     ctx.fillText(z.name + (storm ? " · буря" : ""), cx, cy);
   });
@@ -245,7 +258,7 @@ function renderMap(d) {
     ctx.strokeStyle = im ? "rgba(251,191,36,.7)" : riskColor(o.zone_risk) + "aa";
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.font = "10px Segoe UI";
+    ctx.font = "10px Exo 2, Segoe UI";
     ctx.fillStyle = "rgba(230,237,247,.8)";
     ctx.fillText(kg(o.weight_kg), ex, ey - 8 * S);
     if (selO && selO.id === o.id) {
@@ -270,12 +283,12 @@ function renderMap(d) {
     ctx.fillStyle = "#0e1626"; ctx.fill();
     ctx.strokeStyle = r.status === "stranded" ? "#f87171" : r.status === "idle" ? "#34d399" : "#38bdf8";
     ctx.lineWidth = 2; ctx.stroke();
-    if (r.status === "stranded") { ctx.font = "12px Segoe UI"; ctx.fillStyle = "#f87171"; ctx.textAlign = "center"; ctx.fillText("✗", rx, ry + 4 * S); }
+    if (r.status === "stranded") { ctx.font = "12px Exo 2, Segoe UI"; ctx.fillStyle = "#f87171"; ctx.textAlign = "center"; ctx.fillText("✗", rx, ry + 4 * S); }
     const bp = Math.round((r.batt / r.batt_max) * 100);
     ctx.beginPath(); ctx.arc(rx, ry, 13 * S, -Math.PI / 2, -Math.PI / 2 + (bp / 100) * Math.PI * 2);
     ctx.strokeStyle = bp > 50 ? "#34d399" : bp > 25 ? "#fbbf24" : "#f87171";
     ctx.lineWidth = 2.5; ctx.stroke();
-    ctx.font = "600 10px Segoe UI"; ctx.fillStyle = "#e6edf7"; ctx.textAlign = "center";
+    ctx.font = "600 10px Exo 2, Segoe UI"; ctx.fillStyle = "#e6edf7"; ctx.textAlign = "center";
     ctx.fillText(r.name, rx, ry + 20 * S);
   });
 
@@ -285,7 +298,7 @@ function drawBase(ctx, x, y, S) {
   ctx.beginPath(); ctx.arc(x, y, 8 * S, 0, 7);
   ctx.fillStyle = "#38bdf8"; ctx.globalAlpha = .9; ctx.fill(); ctx.globalAlpha = 1;
   ctx.strokeStyle = "#e6edf7"; ctx.lineWidth = 2; ctx.stroke();
-  ctx.font = "700 11px Segoe UI"; ctx.fillStyle = "#38bdf8"; ctx.textAlign = "center";
+  ctx.font = "700 11px Exo 2, Segoe UI"; ctx.fillStyle = "#38bdf8"; ctx.textAlign = "center";
   ctx.fillText("База", x, y - 12 * S);
 }
 

@@ -1,3 +1,7 @@
+@font-face{font-family:'Exo 2';src:url('/static/assets/exo-lat.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Exo 2';src:url('/static/assets/exo-cyr.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116,U+0460-052F,U+1C80-1C8A,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F}
+@font-face{font-family:'Orbitron';src:url('/static/assets/orbitron-lat.woff2') format('woff2');font-weight:600 900;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+
 :root{
   --bg0:#05070d; --bg1:#0a101d; --glass:rgba(18,26,42,.55); --glass2:rgba(26,36,58,.6);
   --line:rgba(148,163,184,.14); --line2:rgba(148,163,184,.22);
@@ -9,17 +13,17 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{background:radial-gradient(1400px 900px at 75% -20%, #16233f 0%, var(--bg1) 45%, var(--bg0) 100%);
-  color:var(--txt);font:14px/1.4 "Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;
+  color:var(--txt);font:14px/1.4 "Exo 2","Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;
   overflow:hidden}
 
 #topbar{display:flex;align-items:center;gap:16px;padding:12px 22px;color:var(--txt);
   background:rgba(8,12,22,.55);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.4px}
+.brand{display:flex;align-items:center;gap:10px;font-family:"Orbitron",sans-serif;font-weight:700;letter-spacing:1px}
 .brand .logo{font-size:20px}
 .stats{display:flex;gap:26px;align-items:center;margin-left:8px}
 .stat{display:flex;flex-direction:column;gap:2px}
 .stat span{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim)}
-.stat b{font-size:16px;font-weight:600;color:var(--txt)}
+.stat b{font-size:16px;font-weight:600;color:var(--txt);font-variant-numeric:tabular-nums}
 .stat b.good{color:var(--good)}
 .rbar{width:92px;height:7px;background:rgba(148,163,184,.12);border-radius:5px;overflow:hidden;margin-top:2px}
 .rbar div{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--bad),var(--warn),var(--good));transition:width .4s}
