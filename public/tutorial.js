@@ -57,7 +57,8 @@ const TUT = [
   },
 ];
 
-const tut = { active: false, step: 0, started: false, pending: false, scrollStep: -1 };
+const tut = { active: false, step: 0, started: false, pending: false, scrollStep: -1, posStep: -1 };
+window.addEventListener("resize", () => { if (tut.active) tutPlace(); });
 
 function startTutorial() {
   tut.active = true; tut.step = 0; tut.pending = false;
@@ -107,7 +108,8 @@ function tutRender() {
     }
   }
   window.tutMap = tutMapFor(state.data);
-  tutPlace();
+  // позиционируем только при смене шага или ресайзе — иначе пузырь дёргается при перерисовке панелей
+  if (tut.posStep !== tut.step) { tut.posStep = tut.step; tutPlace(); }
 }
 
 // позиционирует пузырь тутора рядом с целью (DOM-элемент или точка на карте), со стрелкой
