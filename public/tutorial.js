@@ -6,7 +6,7 @@
 const TUT = [
   {
     title: "Добро пожаловать, диспетчер 🌙",
-    txt: "Вы — диспетчер лунной базы Tranquility. По Луне разбросаны заказы на пайки, и только ваши роверы могут их доставить.<br><br><b>Цель:</b> продержаться <b>7 дней</b>, не уронив рейтинг базы до 0, и заработать как можно больше кредитов.",
+    txt: "Вы — диспетчер лунной базы Tranquility. По Луне разбросаны заказы на пайки, и только ваши роверы могут их доставить.<br><br><b>Цель:</b> продержаться <b>7 дней</b>, не уронив рейтинг базы до 0, и заработать как можно больше долларов.",
     target: null, need: null, hint: "", btn: "Начать обучение 🚀",
   },
   {
@@ -42,17 +42,17 @@ const TUT = [
   },
   {
     title: "Ускорение времени",
-    txt: "Кнопка <b>⏩</b> ускоряет время в 5 раз — удобно ждать возвращения ровера. Вовремя доставленный заказ даёт полную награду и +2 к рейтингу, опоздание — половину и −4.",
-    target: "#btn-ff", need: null, hint: "", btn: "Дальше →",
+    txt: "Кнопка в шапке управляет временем: <b>⏩ ×5</b> — ускорить (удобно ждать роверов), <b>⏸</b> — пауза. Нажатия переключают: игра → ×5 → пауза → игра. Вовремя доставленный заказ даёт полную награду и +2 к рейтингу, опоздание — половину и −4.",
+    target: "#btn-play", need: null, hint: "", btn: "Дальше →",
   },
   {
     title: "Развивай флот",
-    txt: "На заработанные кредиты открывается кнопка <b>🛰</b> справа: улучшай грузоподъёмность, батарею и скорость роверов, а после нескольких доставок — покупай новые модели в верфи.",
+    txt: "На заработанные доллары открывается кнопка <b>🛰</b> справа: улучшай грузоподъёмность, батарею и скорость роверов, а после нескольких доставок — покупай новые модели в верфи.",
     target: "#btn-fleet", need: null, hint: "", btn: "Дальше →",
   },
   {
     title: "Всё готово!",
-    txt: "Итог дня 7-го: <b>счёт = кредиты + рейтинг × 30</b>. Если рейтинг упадёт в 0 — базу закроют.<br><br>Совет: не гоняй тяжёлые грузы на слабых роверах, заряжайся на базе и обходи бури.<br><br><a onclick=\"showHelp()\">Открыть полные правила</a>",
+    txt: "Итог дня 7-го: <b>счёт = доллары + рейтинг × 30</b>. Если рейтинг упадёт в 0 — базу закроют.<br><br>Совет: не гоняй тяжёлые грузы на слабых роверах, заряжайся на базе и обходи бури.<br><br><a onclick=\"showHelp()\">Открыть полные правила</a>",
     target: null, need: null, hint: "", btn: "Играть 🚀",
   },
 ];
@@ -152,7 +152,7 @@ function findTutTarget(sel) {
   if (sel === "#map-wrap") return document.querySelector("#map-wrap");
   if (sel === "#mission-box") return $("mission-box");
   if (sel === "#ma .launch") return document.querySelector("#ma .launch");
-  if (sel === "#btn-ff") return $("btn-ff");
+  if (sel === "#btn-play") return $("btn-play");
   if (sel === "#btn-fleet") return $("btn-fleet");
   return document.querySelector(sel);
 }
@@ -220,7 +220,7 @@ function showFleet() {
   const d = state.data; if (!d) return;
   let html = `<h2>🛰 Флот и улучшения</h2>
     <div class="score" style="margin:6px 0 0">
-      <div class="sc"><b class="good">${d.credits}</b><span>₵ в наличии</span></div>
+      <div class="sc"><b class="good">${d.credits}</b><span>$ в наличии</span></div>
       <div class="sc"><b>${d.total_done}</b><span>доставок</span></div>
     </div>`;
 
@@ -238,7 +238,7 @@ function showFleet() {
         <div class="f-row">
           <span class="lab">${u.icon} ${u.label}</span>
           <span class="val"><b>${r[u.prop]}</b></span>
-          <span class="cost">${maxed ? "максимум" : "+" + u.delta + " · " + cost + "₵"}</span>
+          <span class="cost">${maxed ? "максимум" : "+" + u.delta + " · " + cost + "$"}</span>
           <button data-fa="upgrade" data-r="${r.id}" data-u="${u.key}" ${can ? "" : "disabled"}>${maxed ? "✓" : cost > d.credits ? "↑" : "Улучшить"}</button>
         </div>`;
     }
@@ -265,7 +265,7 @@ function showShop() {
   const d = state.data; if (!d) return;
   let html = `<h2>🛒 Верфь</h2>
     <div class="score" style="margin:6px 0 0">
-      <div class="sc"><b class="good">${d.credits}</b><span>₵ в наличии</span></div>
+      <div class="sc"><b class="good">${d.credits}</b><span>$ в наличии</span></div>
       <div class="sc"><b>${d.total_done}</b><span>доставок</span></div>
     </div>
     <div class="f-h">Новые модели <span class="fr">витрина обновляется каждые 35–70 мин</span></div>`;
@@ -274,9 +274,9 @@ function showShop() {
       <div class="f-shop">
         <div class="nm">${m.name} <small>· ${m.model}</small></div>
         <div class="dst">груз ${m.cap_kg} кг · батарея ${m.batt} Вт·ч · скорость ${m.speed_kmh} км/ч</div>
-        <div class="sp"><span>стоимость <b>${m.cost}₵</b></span><span>нужно доставок <b>${m.min_done}</b></span></div>
+        <div class="sp"><span>стоимость <b>${m.cost}$</b></span><span>нужно доставок <b>${m.min_done}</b></span></div>
         <button class="buy ${m.unlocked ? "ok" : "lock"}" data-m="${m.id}" ${m.unlocked ? "" : "disabled"}>
-          ${m.unlocked ? `Купить за ${m.cost}₵` : `Доступно после ${m.min_done} доставок`}
+          ${m.unlocked ? `Купить за ${m.cost}$` : `Доступно после ${m.min_done} доставок`}
         </button>
       </div>`;
   }

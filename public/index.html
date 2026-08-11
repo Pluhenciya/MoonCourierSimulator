@@ -12,12 +12,11 @@
   <div class="stats">
     <div class="stat"><span>День</span><b id="st-day">1/7</b></div>
     <div class="stat"><span>Время</span><b id="st-clock">00:00</b></div>
-    <div class="stat"><span>База</span><b id="st-credits">120 ₵</b></div>
+    <div class="stat"><span>База</span><b id="st-credits">120 $</b></div>
     <div class="stat"><span>Рейтинг</span><div class="rbar"><div id="st-rating"></div></div></div>
   </div>
   <div class="spacer"></div>
-  <button id="btn-pause" class="icon" title="Пауза"></button>
-  <button id="btn-ff" class="icon" title="Ускорить время"></button>
+  <button id="btn-play" class="icon" title="Пауза / ускорение"></button>
   <button id="btn-help" class="icon" title="Правила"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>
   <button id="btn-reset" class="ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Новая игра</button>
 </header>
@@ -67,6 +66,33 @@
 </div>
 
 <div id="overlay" class="hidden"><div id="modal" class="modal"></div></div>
+
+<div id="menu" class="hidden">
+  <div class="menu-card">
+    <div class="menu-logo">🌙<span>Moon Courier</span></div>
+    <div class="menu-sub">Симулятор лунной доставки</div>
+    <div id="menu-screen">
+      <button class="menu-btn" id="menu-play"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6 4l14 8-14 8z"/></svg>Играть</button>
+      <button class="menu-btn" id="menu-settings">Настройки</button>
+      <button class="menu-btn" id="menu-scores">Таблица лидеров</button>
+    </div>
+    <div id="menu-settings-screen" class="hidden">
+      <div class="menu-title">Настройки</div>
+      <label class="menu-lab">Имя пилота (для таблицы лидеров)
+        <input id="menu-name" type="text" maxlength="16" placeholder="Диспетчер"/>
+      </label>
+      <div class="menu-row">
+        <button class="menu-btn sm" id="menu-settings-ok">Сохранить</button>
+        <button class="menu-btn sm ghost" id="menu-settings-back">← Назад</button>
+      </div>
+    </div>
+    <div id="menu-scores-screen" class="hidden">
+      <div class="menu-title">Таблица лидеров</div>
+      <div id="menu-scores-list"></div>
+      <div class="menu-row"><button class="menu-btn sm ghost" id="menu-scores-back">← Назад</button></div>
+    </div>
+  </div>
+</div>
 
 <script src="/static/app.js"></script>
 <script src="/static/tutorial.js"></script>

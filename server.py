@@ -28,23 +28,99 @@ PUBLIC_DIR = os.path.join(BASE_DIR, "public")
 # ----------------------------------------------------------------------------
 
 SCALE_KM = 0.05          # 1 px карты = 0.05 км
-GAME_MIN_PER_SEC = 1.0   # 1 реальная секунда = 1 игровая минута
+GAME_MIN_PER_SEC = 2.0   # 1 реальная секунда = 2 игровые минуты (день ≈ 12 минут)
 FF_MULT = 5.0            # множитель при ускорении
 DAYS_TO_SURVIVE = 7
 START_RATING = 80
 START_CREDITS = 120
 REQ_BATTERY_EPS = 0.5    # запас при проверке батареи
 
-ZONES = {
-    "maria":     {"name": "Maria Plain",       "poly": [(180, 440), (820, 440), (820, 700), (180, 700)], "speed": 1.00, "risk": 0.06, "energy": 1.00, "bonus": 1.00, "color": "#4a6b8a"},
-    "crater":    {"name": "Crater Field",      "poly": [(280, 230), (720, 230), (780, 430), (220, 430)], "speed": 0.75, "risk": 0.28, "energy": 1.35, "bonus": 1.15, "color": "#6b5b4a"},
-    "taurus":    {"name": "Taurus Highlands",  "poly": [(0, 0), (300, 0), (300, 230), (0, 260)],          "speed": 0.60, "risk": 0.50, "energy": 1.50, "bonus": 1.40, "color": "#5a4a6b"},
-    "radiation": {"name": "Radiation Valley",  "poly": [(700, 230), (1000, 0), (1000, 320), (700, 230)], "speed": 0.85, "risk": 0.80, "energy": 1.15, "bonus": 1.60, "color": "#6b4a4a"},
-    "sanctum":   {"name": "Sanctum Ridge",     "poly": [(0, 430), (120, 430), (120, 700), (0, 700)],     "speed": 0.90, "risk": 0.12, "energy": 1.00, "bonus": 1.05, "color": "#3f6b5a"},
-    "apollo":    {"name": "Apollo Basin",      "poly": [(880, 430), (1000, 430), (1000, 700), (880, 700)], "speed": 0.95, "risk": 0.18, "energy": 1.05, "bonus": 1.10, "color": "#6b5a3f"},
+# Характеристики зон (полигоны генерируются случайно при старте — см. gen_world)
+ZONE_META = {
+    "maria":     {"name": "Maria Plain",       "speed": 1.00, "risk": 0.06, "energy": 1.00, "bonus": 1.00, "color": "#4a6b8a"},
+    "crater":    {"name": "Crater Field",      "speed": 0.75, "risk": 0.28, "energy": 1.35, "bonus": 1.15, "color": "#6b5b4a"},
+    "taurus":    {"name": "Taurus Highlands",  "speed": 0.60, "risk": 0.50, "energy": 1.50, "bonus": 1.40, "color": "#5a4a6b"},
+    "radiation": {"name": "Radiation Valley",  "speed": 0.85, "risk": 0.80, "energy": 1.15, "bonus": 1.60, "color": "#6b4a4a"},
+    "sanctum":   {"name": "Sanctum Ridge",     "speed": 0.90, "risk": 0.12, "energy": 1.00, "bonus": 1.05, "color": "#3f6b5a"},
+    "apollo":    {"name": "Apollo Basin",      "speed": 0.95, "risk": 0.18, "energy": 1.05, "bonus": 1.10, "color": "#6b5a3f"},
 }
-# порядок отрисовки (снизу вверх)
 ZONE_ORDER = ["maria", "crater", "taurus", "radiation", "sanctum", "apollo"]
+
+ZONES = {}      # заполняется gen_world()
+CRATERS = []    # заполняется gen_world()
+
+
+def gen_world(rand):
+    """Генерирует случайную мозаику зон (общие ломаные границы) и кратеры.
+    Топология — 3 колонны (taurus+sanctum / crater+maria / radiation+apollo),
+    в каждой колонне верх/низ разделён ломаной. Каждая зона соседствует с
+    обходной колонной, поэтому буря в одной зоне не блокирует весь маршрут."""
+    def jit(v, a):
+        return v + rand.uniform(-a, a)
+
+    # вертикальные границы колонн (x≈345 и x≈560) — общие для соседей
+    v1 = [(345, 0), (jit(345, 22), 80), (jit(345, 22), 160), (jit(345, 22), 230),
+          (jit(345, 22), 320), (jit(345, 22), 350), (jit(345, 22), 400),
+          (jit(345, 22), 480), (jit(345, 22), 560), (jit(345, 22), 640), (345, 700)]
+    v2 = [(560, 0), (jit(560, 22), 80), (jit(560, 22), 160), (jit(560, 22), 230),
+          (jit(560, 22), 320), (jit(560, 22), 440), (jit(560, 22), 480),
+          (jit(560, 22), 560), (jit(560, 22), 640), (560, 700)]
+    # горизонтальные границы внутри колонн (концы — точно на вертикальных)
+    h1 = [(0, jit(350, 22)), (jit(90, 26), 420), (jit(190, 26), 330), (jit(280, 26), 380),
+          (v1[5][0], 350)]                       # taurus|sanctum
+    h2 = [(v1[5][0], 350), (jit(430, 26), 470), (jit(430, 26), 420), (jit(430, 26), 460),
+          (v2[5][0], 440)]                       # crater|maria
+    h3 = [(v2[5][0], 440), (jit(700, 26), 470), (jit(790, 26), 420), (jit(880, 26), 460),
+          (1000, jit(440, 22))]                  # radiation|apollo
+
+    zones = {
+        "taurus": [(0, 0), (345, 0), (v1[1][0], 80), (v1[2][0], 160), (v1[3][0], 230),
+                   (v1[4][0], 320), (v1[5][0], 350),
+                   (h1[3][0], 380), (h1[2][0], 330), (h1[1][0], 420), (0, h1[0][1])],
+        "sanctum": [(0, h1[0][1]), (h1[1][0], 420), (h1[2][0], 330), (h1[3][0], 380),
+                    (v1[5][0], 350), (v1[6][0], 400), (v1[7][0], 480), (v1[8][0], 560),
+                    (v1[9][0], 640), (345, 700), (0, 700)],
+        "crater": [(345, 0), (560, 0), (v2[1][0], 80), (v2[2][0], 160), (v2[3][0], 230),
+                   (v2[4][0], 320), (v2[5][0], 440),
+                   (h2[3][0], 460), (h2[2][0], 420), (h2[1][0], 470), (v1[5][0], 350),
+                   (v1[4][0], 320), (v1[3][0], 230), (v1[2][0], 160), (v1[1][0], 80)],
+        "maria": [(v1[5][0], 350), (h2[1][0], 470), (h2[2][0], 420), (h2[3][0], 460),
+                  (v2[5][0], 440), (v2[6][0], 480), (v2[7][0], 560), (v2[8][0], 640),
+                  (560, 700), (345, 700),
+                  (v1[9][0], 640), (v1[8][0], 560), (v1[7][0], 480), (v1[6][0], 400)],
+        "radiation": [(560, 0), (1000, 0), (1000, h3[4][1]), (h3[3][0], 460),
+                      (h3[2][0], 420), (h3[1][0], 470), (v2[5][0], 440),
+                      (v2[4][0], 320), (v2[3][0], 230), (v2[2][0], 160), (v2[1][0], 80)],
+        "apollo": [(v2[5][0], 440), (h3[1][0], 470), (h3[2][0], 420), (h3[3][0], 460),
+                   (1000, h3[4][1]), (1000, 700), (560, 700),
+                   (v2[9][0], 640), (v2[8][0], 560), (v2[7][0], 480)],
+    }
+    zones = {k: dict(ZONE_META[k], poly=[(round(x, 1), round(y, 1)) for (x, y) in poly])
+             for k, poly in zones.items()}
+
+    # кратеры: случайно, но не мешая базе и форпостам
+    craters = []
+    tries = 0
+    outposts = list(OUTPOSTS.values())
+    while len(craters) < 32 and tries < 500:
+        tries += 1
+        x = rand.uniform(25, 975)
+        y = rand.uniform(25, 675)
+        r = rand.uniform(8, 38)
+        if math.hypot(x - 500, y - 660) < 95 + r:
+            continue
+        if any(math.hypot(x - o["x"], y - o["y"]) < 55 + r for o in outposts):
+            continue
+        if any(math.hypot(x - cx, y - cy) < r + cr + 22 for (cx, cy, cr) in craters):
+            continue
+        craters.append((round(x, 1), round(y, 1), round(r, 1)))
+    return zones, craters
+
+
+def apply_world(zones, craters):
+    global ZONES, CRATERS
+    ZONES = zones
+    CRATERS = craters
 
 OUTPOSTS = {
     "base":       {"name": "Tranquility Hub", "x": 500, "y": 660},
@@ -123,7 +199,7 @@ def shop_tick(dt_min):
     i = RAND.randrange(len(STATE["shop"]))
     old = STATE["shop"][i]
     STATE["shop"][i] = roll_model(total)
-    log_event("mission", "Верфь обновила витрину: «%s %s» (%.0f кг, %d км/ч) — %d₵. Осталась: «%s»."
+    log_event("mission", "Верфь обновила витрину: «%s %s» (%.0f кг, %d км/ч) — %d$. Осталась: «%s»."
               % (STATE["shop"][i]["name"], STATE["shop"][i]["model"], STATE["shop"][i]["cap_kg"],
                  STATE["shop"][i]["speed_kmh"], STATE["shop"][i]["cost"], old["name"]))
     STATE["shop_next"] = STATE["minute_total"] + RAND.randint(*SHOP_REFRESH_MIN)
@@ -236,14 +312,7 @@ def dist_km(x0, y0, x1, y1):
 # Маршруты: объезд кратеров и активных бурь (A* по сетке)
 # ----------------------------------------------------------------------------
 
-# Кратеры в координатах карты (x, y, радиус) — совпадают с отрисовкой клиента
-CRATERS = [
-    (100, 110, 30), (250, 90, 16), (400, 60, 42), (620, 100, 22), (800, 70, 34),
-    (930, 140, 18), (60, 260, 20), (300, 240, 12), (520, 200, 28), (730, 230, 15),
-    (880, 300, 40), (140, 400, 26), (330, 380, 34), (560, 360, 14), (690, 420, 30),
-    (860, 500, 20), (240, 540, 40), (450, 520, 24), (620, 560, 16), (780, 590, 30),
-    (120, 620, 14), (380, 640, 22), (900, 620, 26), (520, 660, 12),
-]
+# Кратеры генерируются в gen_world() (CRATERS) — совпадают с отрисовкой клиента
 PATH_GRID = 25.0           # шаг сетки, px
 PATH_CLEAR = 12.0          # запас вокруг кратера/бури, px
 
@@ -469,6 +538,8 @@ def seed_orders(sample=None):
 
 def seed_game():
     global STATE
+    zones, craters = gen_world(RAND)
+    apply_world(zones, craters)
     STATE = {
         "day": 1,
         "minute_total": 0.0,          # игровые минуты от старта
@@ -481,6 +552,8 @@ def seed_game():
         "end_after_day": DAYS_TO_SURVIVE,
         "storms": {},                 # zone_id -> минута окончания бури
         "last_storm_check": 0,
+        "zones": zones,               # случайный мир этой партии
+        "craters": craters,
     }
     rovers = {}
     for rid, r in ROVERS.items():
@@ -727,6 +800,7 @@ def maybe_event(r, j, dt_min):
         return
     j["events"] += 1
     name = r["name"]
+    spent_min = (1.0 - j["progress"]) * j["out_min"]   # осталось до конца фазы
     roll = RAND.random()
     if zid == "radiation" and RAND.random() < 0.35:
         log_event("hazard", "[%s] Радиационная вспышка! -15 Вт*ч." % name)
@@ -743,6 +817,7 @@ def maybe_event(r, j, dt_min):
     elif roll < 0.75 and z["risk"] > 0.30:
         log_event("hazard", "[%s] Метеорит мимо. ЭМИ встряхнуло электронику (-12 Вт*ч)." % name)
         r["batt"] = max(0.0, r["batt"] - 12)
+        return
     elif roll < 0.92 and z["risk"] > 0.50:
         log_event("hazard", "[%s] Повреждён привод колеса — скорость -35%%." % name)
         j["speed_penalty"] = 0.65
@@ -751,6 +826,8 @@ def maybe_event(r, j, dt_min):
         log_event("hazard", "[%s] Контакт с породой — ось зажало, скорость -40%%." % name)
         j["speed_penalty"] = 0.60
         j["out_min"] /= 0.60
+    # время фазы изменилось — сохраняем пройденное время, чтобы ровер не «откатывался»
+    j["progress"] = 1.0 - min(1.0, spent_min / max(0.01, j["out_min"]))
     if r["batt"] <= 0:
         strand(r, j)
 
@@ -781,7 +858,7 @@ def finish_delivery(r, j):
     order["reward_earned"] = reward
     if on_time:
         STATE["rating"] = min(100, STATE["rating"] + 2)
-        log_event("delivery", "Доставка %s завершена вовремя! +%d кредитов, рейтинг +2." % (r["name"], reward))
+        log_event("delivery", "Доставка %s завершена вовремя! +%d долларов, рейтинг +2." % (r["name"], reward))
     else:
         STATE["rating"] = max(0, STATE["rating"] - 4)
         reward_late = int(reward / 2)
@@ -831,10 +908,10 @@ def action_cmd(name, payload):
         to_fill = r["batt_max"] - r["batt"]
         cost = int(math.ceil(to_fill / 2))
         if cost > STATE["credits"]:
-            return {"ok": False, "error": "Не хватает кредитов (%d нужен, есть %d)." % (cost, STATE["credits"])}
+            return {"ok": False, "error": "Не хватает долларов (%d нужен, есть %d)." % (cost, STATE["credits"])}
         STATE["credits"] -= cost
         r["batt"] = r["batt_max"]
-        log_event("mission", "Экстренная зарядка %s: -%d кредитов, батарея 100%%." % (r["name"], cost))
+        log_event("mission", "Экстренная зарядка %s: -%d долларов, батарея 100%%." % (r["name"], cost))
         save_all()
         return {"ok": True}
     if name == "recover":
@@ -852,7 +929,7 @@ def action_cmd(name, payload):
         r["batt"] = 15
         r["x"], r["y"] = OUTPOSTS["base"]["x"], OUTPOSTS["base"]["y"]
         r["journey"] = None
-        log_event("mission", "Эвакуация %s: -%d кредитов. Рейтинг -3." % (r["name"], cost))
+        log_event("mission", "Эвакуация %s: -%d долларов. Рейтинг -3." % (r["name"], cost))
         save_all()
         return {"ok": True}
     if name == "fast_forward":
@@ -860,7 +937,17 @@ def action_cmd(name, payload):
         return {"ok": True}
     if name == "pause":
         on = payload.get("on")
-        STATE["paused"] = bool(payload.get("on")) if on is not None else not STATE.get("paused", False)
+        if on is not None:
+            if on:
+                # запоминаем режим до паузы, чтобы кнопка вернулась в него
+                STATE.setdefault("was_ff", STATE.get("ff", False))
+                STATE["ff"] = False
+                STATE["paused"] = True
+            else:
+                STATE["paused"] = False
+                STATE["ff"] = bool(STATE.get("was_ff", False))
+        else:
+            STATE["paused"] = not STATE.get("paused", False)
         return {"ok": True, "paused": STATE["paused"]}
     if name == "upgrade":
         rid = payload.get("rover_id")
@@ -875,11 +962,11 @@ def action_cmd(name, payload):
             return {"ok": False, "error": "Характеристика уже макс. уровня."}
         cost = plan["costs"][lvl]
         if cost > STATE["credits"]:
-            return {"ok": False, "error": "Не хватает кредитов (%d нужен, есть %d)." % (cost, STATE["credits"])}
+            return {"ok": False, "error": "Не хватает долларов (%d нужен, есть %d)." % (cost, STATE["credits"])}
         STATE["credits"] -= cost
         r[plan["key"]] = lvl + 1
         r[plan["prop"]] = round(r[plan["prop"]] + plan["delta"])
-        log_event("mission", "%s: улучшение «%s» %s%d → +%d %s. −%d₵" %
+        log_event("mission", "%s: улучшение «%s» %s%d → +%d %s. −%d$" %
                   (r["name"], plan["label"], plan["icon"], lvl + 1, plan["delta"],
                    plan["label"], cost))
         save_all()
@@ -893,7 +980,7 @@ def action_cmd(name, payload):
         if total_done < slot["min_done"]:
             return {"ok": False, "error": "Доступно после %d выполненных доставок (сейчас %d)." % (slot["min_done"], total_done)}
         if slot["cost"] > STATE["credits"]:
-            return {"ok": False, "error": "Не хватает кредитов (%d нужен, есть %d)." % (slot["cost"], STATE["credits"])}
+            return {"ok": False, "error": "Не хватает долларов (%d нужен, есть %d)." % (slot["cost"], STATE["credits"])}
         STATE["credits"] -= slot["cost"]
         m = slot
         rid = gen_id("rover")
@@ -908,7 +995,7 @@ def action_cmd(name, payload):
         }
         STATE["shop"].remove(slot)
         STATE["shop"].append(roll_model(total_done))  # витрина не пустеет
-        log_event("mission", "Во флот прибыл новый ровер %s «%s» (%d кг, %d км/ч). −%d₵" %
+        log_event("mission", "Во флот прибыл новый ровер %s «%s» (%d кг, %d км/ч). −%d$" %
                   (m["name"], m["model"], m["cap_kg"], m["speed_kmh"], m["cost"]))
         save_all()
         return {"ok": True}
@@ -1052,6 +1139,7 @@ def public_state():
         "gameover_reason": STATE["gameover_reason"],
         "zones": {k: dict(v) for k, v in ZONES.items()},
         "zone_order": ZONE_ORDER,
+        "craters": STATE.get("craters", CRATERS),
         "outposts": OUTPOSTS,
         "rovers": rovers,
         "orders": orders,
@@ -1082,6 +1170,16 @@ def main(port=8000):
             reset_data()
         else:
             shop_init()  # витрина для старых сейвов
+        # мир: восстанавливаем или генерируем заново
+        if STATE and STATE.get("zones"):
+            apply_world(STATE["zones"], STATE.get("craters", []))
+        else:
+            zones, craters = gen_world(RAND)
+            apply_world(zones, craters)
+            if STATE is not None:
+                STATE["zones"] = zones
+                STATE["craters"] = craters
+                save_all()
     t = threading.Thread(target=sim_loop, daemon=True)
     t.start()
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)

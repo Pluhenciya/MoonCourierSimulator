@@ -44,12 +44,11 @@ function render() {
   const d = state.data; if (!d) return;
   $("st-day").textContent = d.time.day + "/" + d.time.days_total;
   $("st-clock").textContent = d.time.clock;
-  $("st-credits").textContent = d.credits + " ₵";
+  $("st-credits").textContent = d.credits + " $";
   $("st-rating").style.width = d.rating + "%";
-  $("btn-ff").innerHTML = d.time.ff ? IC.ff + IC.ff : IC.ff;
-  $("btn-pause").innerHTML = d.time.paused ? IC.play : IC.pause;
-  $("btn-pause").classList.toggle("on", d.time.paused);
-  $("btn-ff").disabled = d.time.paused;
+  $("btn-play").innerHTML = d.time.paused ? IC.play : d.time.ff ? IC.ff + IC.ff : IC.pause;
+  $("btn-play").classList.toggle("on", d.time.paused);
+  $("btn-play").title = d.time.paused ? "Продолжить" : d.time.ff ? "Пауза" : "Ускорение (×5)";
   if (d.time.paused) $("st-clock").textContent = "⏸ " + d.time.clock;
   renderOrders(d); renderRovers(d); renderMission(d); renderLog(d); renderMap(d);
   tutTick(d);
@@ -80,7 +79,7 @@ function renderOrders(d) {
     el.className = "oc" + (state.selOrder === o.id ? " sel" : "") + (im ? " off" : "");
     el.innerHTML = `
       <div class="top"><span class="dest">${o.outpost_name}</span>${chip}</div>
-      <div class="mid"><span class="w">${kg(o.weight_kg)}</span><span class="r">+${o.reward}₵</span></div>
+      <div class="mid"><span class="w">${kg(o.weight_kg)}</span><span class="r">+${o.reward}$</span></div>
       <div class="risk"><i style="--dot:${riskColor(o.zone_risk)}"></i>риск ${Math.round(o.zone_risk * 100)}%</div>
       <div class="obar"><div style="width:${Math.max(0, Math.min(100, (left / o.urgent) * 100))}%"></div></div>`;
     el.addEventListener("click", () => { state.selOrder = o.id; state.hoverOrder = null; renderOrders(d); renderMission(d); });
@@ -107,7 +106,7 @@ function renderRovers(d) {
       : `<span class="st ${cls}">${txt}</span>`;
     const info = r.journey
       ? `<div class="triple"><span>маршрут</span><span>${r.phase_label}</span><b>${Math.round((r.progress || 0) * 50)}%</b></div>`
-      : `<div class="triple"><span>доставок <b>${r.done}</b></span><span>заработано <b>${r.earned}₵</b></span></div>`;
+      : `<div class="triple"><span>доставок <b>${r.done}</b></span><span>заработано <b>${r.earned}$</b></span></div>`;
     el.innerHTML = `
       <div class="top"><span class="name">${r.name} <small>· ${r.model}</small></span>${statusChip}</div>
       <div class="bbar"><div style="width:${pct}%;background:${batC}"></div></div>
@@ -143,7 +142,7 @@ function renderMission(d) {
     <div class="mt">${r.name} → ${o.outpost_name}</div>
     <div class="grid">
       <span>Груз</span><b>${kg(o.weight_kg)}</b>
-      <span>Награда</span><b>+${o.reward}₵</b>
+      <span>Награда</span><b>+${o.reward}$</b>
       <span>Туда-обратно</span><b>≈${timeM}′ · ${estE} Вт·ч</b>
       <span>Срок</span><b>${Math.max(0, Math.ceil(o.expires_at - d.time.minute_total))}′</b>
     </div>
@@ -153,12 +152,12 @@ function renderMission(d) {
 function actionsHtml(d, r, o, block) {
   if (r.status === "stranded") {
     const cost = Math.round(15 + Math.hypot(d.outposts[o.outpost].x - r.x, d.outposts[o.outpost].y - r.y) * 0.05 * 0.6);
-    return `<button class="recover" data-a="recover">Эвакуировать ${r.name} · −${cost}₵</button>`;
+    return `<button class="recover" data-a="recover">Эвакуировать ${r.name} · −${cost}$</button>`;
   }
   if (block) return `<div class="err">✕ Доставка невозможна: ${block}</div>`;
   const cost = Math.ceil((r.batt_max - r.batt) / 2);
   return `<button class="launch" data-a="launch">🚀 Запустить доставку</button>
-    <button class="charge" data-a="charge">⚡ Быстрая зарядка · −${cost}₵</button>`;
+    <button class="charge" data-a="charge">⚡ Быстрая зарядка · −${cost}$</button>`;
 }
 function wireActions(d, r, o, block) {
   const box = $("ma");
@@ -180,7 +179,11 @@ function wireActions(d, r, o, block) {
 }
 
 /* -------- журнал -------- */
+let logKey = "";
 function renderLog(d) {
+  const k = d.events.slice(0, 12).map((e) => e.minute + "|" + e.text).join("\n");
+  if (k === logKey) return;   // не перерисовываем, если лог не менялся (против «моргания»)
+  logKey = k;
   const box = $("log");
   box.innerHTML = "";
   const cls = { delivery: "ok", hazard: "alert", storm: "alert", mission: "miss" };
@@ -244,33 +247,25 @@ function buildBg(d, W, H) {
   cx.fillStyle = light; cx.fillRect(0, 0, W, H);
 
   // кратеры: светлая кромка (верх слева) + тёмная тень (низ справа)
-  let seed = 7;
-  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const crater = (cxp, cyp, cr) => {
-    // дно кратера
+    // внешний вал
     cx.beginPath(); cx.arc(cxp, cyp, cr, 0, 7);
-    cx.fillStyle = "rgba(90,100,118,.65)"; cx.fill();
+    cx.fillStyle = "rgba(74,84,102,.5)"; cx.fill();
+    // дно кратера
+    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.8, 0, 7);
+    cx.fillStyle = "rgba(112,122,140,.75)"; cx.fill();
     // внутренняя тень
-    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.78, 0, 7);
-    cx.fillStyle = "rgba(52,60,76,.55)"; cx.fill();
+    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.62, 0, 7);
+    cx.fillStyle = "rgba(56,66,84,.6)"; cx.fill();
     // светлая кромка (верх слева)
-    cx.lineWidth = Math.max(1.4, cr * 0.22);
-    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.92, Math.PI * 1.05, Math.PI * 1.95);
-    cx.strokeStyle = "rgba(235,242,250,.55)"; cx.stroke();
+    cx.lineWidth = Math.max(1.4, cr * 0.18);
+    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.9, Math.PI * 1.05, Math.PI * 1.95);
+    cx.strokeStyle = "rgba(235,242,250,.65)"; cx.stroke();
     // тёмная кромка (низ справа)
-    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.92, Math.PI * 1.95, Math.PI * 3.05);
-    cx.strokeStyle = "rgba(38,46,62,.5)"; cx.stroke();
+    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.9, Math.PI * 1.95, Math.PI * 3.05);
+    cx.strokeStyle = "rgba(38,46,62,.55)"; cx.stroke();
   };
-  const craters = [
-    [100, 110, 30], [250, 90, 16], [400, 60, 42], [620, 100, 22], [800, 70, 34],
-    [930, 140, 18], [60, 260, 20], [300, 240, 12], [520, 200, 28], [730, 230, 15],
-    [880, 300, 40], [140, 400, 26], [330, 380, 34], [560, 360, 14], [690, 420, 30],
-    [860, 500, 20], [240, 540, 40], [450, 520, 24], [620, 560, 16], [780, 590, 30],
-    [120, 620, 14], [380, 640, 22], [900, 620, 26], [520, 660, 12],
-  ];
-  craters.forEach(([a, b, c]) => crater(px2(a), py2(b), c * S));
-  // мелкие кратеры
-  for (let i = 0; i < 40; i++) crater(px2(30 + rnd() * 940), py2(30 + rnd() * 640), (2 + rnd() * 5) * S);
+  (d.craters || []).forEach(([a, b, c]) => crater(px2(a), py2(b), c * S));
 
   // слабое виньетирование
   const vin = cx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
@@ -286,7 +281,7 @@ function renderMap(d) {
   const W = canvas.parentElement.clientWidth, H = canvas.parentElement.clientHeight;
   if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
   initStars(W, H);
-  const key = W + "x" + H;
+  const key = W + "x" + H + "|" + (d.craters ? d.craters.length + ":" + d.craters[0].join(",") : "");
   if (!bgCanvas || bgKey !== key) { bgCanvas = buildBg(d, W, H); bgKey = key; }
   const ctx = canvas.getContext("2d");
   ctx.drawImage(bgCanvas, 0, 0);
@@ -319,12 +314,23 @@ function renderMap(d) {
     ctx.fillText(z.name + (storm ? " · буря" : ""), cx, cy);
   });
 
-  // заказы
+  // заказы: точки распределяются по кольцу вокруг форпоста, чтобы не накладываться
   const selO = d.orders.find((x) => x.id === state.selOrder);
+  const orderPos = {};
+  const byOut = {};
+  d.orders.forEach((o) => { if (o.status === "available") (byOut[o.outpost] = byOut[o.outpost] || []).push(o); });
+  for (const op in byOut) {
+    const list = byOut[op], out = d.outposts[op];
+    list.forEach((o, i) => {
+      const n = list.length, ang = -Math.PI / 2 + (i * Math.PI * 2) / n;
+      const r = 20 + (n > 6 ? 14 : 0);
+      orderPos[o.id] = { x: out.x + Math.cos(ang) * r, y: out.y + Math.sin(ang) * r };
+    });
+  }
   d.orders.forEach((o) => {
     if (o.status !== "available") return;
-    const out = d.outposts[o.outpost];
-    const ex = px(out.x), ey = py(out.y);
+    const p = orderPos[o.id] || { x: d.outposts[o.outpost].x, y: d.outposts[o.outpost].y };
+    const ex = px(p.x), ey = py(p.y);
     const im = imposs(d, o);
     ctx.beginPath(); ctx.arc(ex, ey, (selO && selO.id === o.id ? 7 : 5) * S, 0, 7);
     ctx.fillStyle = im ? "#fbbf24" : "#e6edf7";
@@ -339,11 +345,11 @@ function renderMap(d) {
       ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
       ctx.beginPath(); ctx.arc(ex, ey, 11 * S, 0, 7); ctx.stroke(); ctx.setLineDash([]);
     }
-    // наведение на заказ — подсветка пункта доставки
+    // наведение на заказ — подсветка пункта доставки (надпись над точкой)
     if (state.hoverOrder && state.hoverOrder === o.id) {
       ctx.font = "700 11px Exo 2, Segoe UI";
       ctx.fillStyle = "#38bdf8"; ctx.textAlign = "center";
-      ctx.fillText("▼ сюда доставить", ex, ey + 14 * S);
+      ctx.fillText("▲ доставить сюда", ex, ey - 20 * S);
       const hpx = px(d.outposts.base.x), hpy = py(d.outposts.base.y);
       ctx.beginPath(); ctx.moveTo(hpx, hpy); ctx.lineTo(ex, ey);
       ctx.strokeStyle = "rgba(56,189,248,.45)"; ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]);
@@ -361,7 +367,7 @@ function renderMap(d) {
   d.rovers.forEach((r) => {
     const pv = state.roverPrev[r.id];
     const dx = r.x - (pv ? pv.x : r.x), dy = r.y - (pv ? pv.y : r.y);
-    const teleport = !pv || Math.hypot(dx, dy) > 30;
+    const teleport = !pv || Math.hypot(dx, dy) > 250;
     const a = teleport || !pv ? 1 : Math.min(1, (nowMs - pv.t) / 800);
     const rx = px(pv && !teleport ? pv.x + dx * a : r.x);
     const ry = py(pv && !teleport ? pv.y + dy * a : r.y);
@@ -431,7 +437,7 @@ function drawBase(ctx, x, y, S) {
 /* -------- правила и финал -------- */
 const RULES = `
   <h2>🌙 Moon Courier — правила</h2>
-  <p>Вы — диспетчер лунной базы. Выживите <b>7 дней</b>, не уронив рейтинг до 0, и заработайте максимум кредитов.</p>
+  <p>Вы — диспетчер лунной базы. Выживите <b>7 дней</b>, не уронив рейтинг до 0, и заработайте максимум долларов.</p>
   <h3>Как играть</h3>
   <ul>
     <li>Выберите заказ и ровер, нажмите <b>🚀 Запустить</b>.</li>
@@ -448,18 +454,19 @@ const RULES = `
   <ul>
     <li>Вовремя — полная награда (+2 рейтинга). Опоздание — половина (−4).</li>
     <li>Просрочка и застрявший ровер — минусы к рейтингу.</li>
-    <li>Финал 7-го дня: счёт = кредиты + рейтинг × 30.</li>
+    <li>Финал 7-го дня: счёт = доллары + рейтинг × 30.</li>
   </ul>`;
 function showHelp() { showModal(RULES + `<button onclick="hideModal()">Понятно 🚀</button>`); }
 
 function showGameOver(d) {
   if (!$("overlay").classList.contains("hidden")) return;
+  leaderSave(d);
   const ok = d.gameover_reason === "success";
   $("modal").innerHTML = `
     <h2>${ok ? "🏆 База выстояла 7 дней!" : "💀 База закрыта"}</h2>
     <div class="end-msg">${ok ? "Превосходная работа, диспетчер." : d.gameover_reason}</div>
     <div class="score">
-      <div class="sc"><b class="good">${d.credits}</b><span>кредитов</span></div>
+      <div class="sc"><b class="good">${d.credits}</b><span>долларов</span></div>
       <div class="sc"><b class="${ok ? "good" : "warn"}">${d.rating}</b><span>рейтинг</span></div>
       <div class="sc"><b>${d.deliveries.length}</b><span>доставок</span></div>
       <div class="sc"><b>${d.credits + d.rating * 30}</b><span>итог</span></div>
@@ -470,19 +477,68 @@ function showGameOver(d) {
 function showModal(html) { $("modal").innerHTML = html; $("overlay").classList.remove("hidden"); }
 function hideModal() { $("overlay").classList.add("hidden"); }
 
+/* -------- главное меню / настройки / лидеры -------- */
+const MENU_STORAGE = "mcs_scores";
+function menuShow() { $("menu").classList.remove("hidden"); api("pause", { on: true }); }
+function menuHide() { $("menu").classList.add("hidden"); api("pause", { on: false }); }
+function menuScreen(which) {
+  ["menu-screen", "menu-settings-screen", "menu-scores-screen"].forEach((id) => $(id).classList.toggle("hidden", id !== which));
+}
+function leaderSave(d) {
+  try {
+    const name = (localStorage.getItem("mcs_name") || "Диспетчер").trim() || "Диспетчер";
+    const score = d.credits + d.rating * 30;
+    const list = JSON.parse(localStorage.getItem(MENU_STORAGE) || "[]");
+    list.push({ name, score, rating: d.rating, done: d.total_done, day: d.time.day, ts: Date.now() });
+    list.sort((a, b) => b.score - a.score);
+    localStorage.setItem(MENU_STORAGE, JSON.stringify(list.slice(0, 10)));
+  } catch { /* localStorage недоступен */ }
+}
+function leaderRender() {
+  const box = $("menu-scores-list");
+  try {
+    const list = JSON.parse(localStorage.getItem(MENU_STORAGE) || "[]");
+    if (!list.length) { box.innerHTML = `<div class="menu-empty">Пока нет результатов. Заверши партию — и появишься здесь!</div>`; return; }
+    box.innerHTML = `<table class="scores"><tr><th>#</th><th>Пилот</th><th>Итог</th><th>Рейтинг</th><th>Доставок</th></tr>` +
+      list.map((e, i) => `<tr><td>${i + 1}</td><td>${e.name}</td><td><b>${e.score}$</b></td><td>${e.rating}</td><td>${e.done}</td></tr>`).join("") +
+      `</table>`;
+  } catch { box.innerHTML = `<div class="menu-empty">—</div>`; }
+}
+function initMenu() {
+  $("menu-play").addEventListener("click", () => {
+    const s = $("menu-name").value.trim();
+    if (s) localStorage.setItem("mcs_name", s);
+    menuHide(); poll();
+  });
+  $("menu-settings").addEventListener("click", () => {
+    $("menu-name").value = localStorage.getItem("mcs_name") || "";
+    menuScreen("menu-settings-screen");
+  });
+  $("menu-settings-ok").addEventListener("click", () => {
+    const s = $("menu-name").value.trim();
+    if (s) localStorage.setItem("mcs_name", s);
+    menuScreen("menu-screen");
+  });
+  $("menu-settings-back").addEventListener("click", () => menuScreen("menu-screen"));
+  $("menu-scores").addEventListener("click", () => { leaderRender(); menuScreen("menu-scores-screen"); });
+  $("menu-scores-back").addEventListener("click", () => menuScreen("menu-screen"));
+  menuShow();
+}
+
 /* -------- кнопки -------- */
-$("btn-ff").addEventListener("click", async () => {
-  await api("fast_forward", { on: !state.data.time.ff });
-  poll();
-});
-$("btn-pause").addEventListener("click", async () => {
-  await api("pause", {});
+// одна кнопка: игра → ×5 → пауза → игра (в прежнем режиме)
+$("btn-play").addEventListener("click", async () => {
+  const t = state.data.time;
+  if (t.paused) await api("pause", { on: false });
+  else if (t.ff) await api("pause", { on: true });
+  else await api("fast_forward", { on: true });
   poll();
 });
 $("btn-reset").addEventListener("click", async () => {
   if (confirm("Начать заново?")) { await api("reset"); poll(); }
 });
 
+initMenu();
 poll();
 setInterval(poll, 800);
 
