@@ -16,10 +16,10 @@
     <div class="stat"><span>Рейтинг</span><div class="rbar"><div id="st-rating"></div></div></div>
   </div>
   <div class="spacer"></div>
-  <button id="btn-pause" class="icon" title="Пауза">⏸</button>
-  <button id="btn-ff" class="icon" title="Ускорить время">⏩</button>
-  <button id="btn-help" class="icon" title="Правила">?</button>
-  <button id="btn-reset" class="ghost">Новая игра</button>
+  <button id="btn-pause" class="icon" title="Пауза"></button>
+  <button id="btn-ff" class="icon" title="Ускорить время"></button>
+  <button id="btn-help" class="icon" title="Правила"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>
+  <button id="btn-reset" class="ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Новая игра</button>
 </header>
 
 <main id="layout">
@@ -40,7 +40,12 @@
   </section>
 
   <aside class="side">
-    <div class="pane-head">Роверы <button class="icon sm" id="btn-fleet" title="Флот: улучшения и покупка">🛰</button></div>
+    <div class="pane-head">Роверы
+      <span class="pane-btns">
+        <button class="icon sm" id="btn-shop" title="Верфь: новые роверы"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></button>
+        <button class="icon sm" id="btn-fleet" title="Флот: улучшения"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></button>
+      </span>
+    </div>
     <div id="rovers-list" class="scroll"></div>
     <div id="mission-box"></div>
   </aside>

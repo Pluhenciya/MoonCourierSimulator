@@ -2,7 +2,7 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const state = { selOrder: null, selRover: null, data: null, roverPrev: {} };
+const state = { selOrder: null, selRover: null, data: null, roverPrev: {}, hoverOrder: null };
 window.tutMap = null; // цель подсветки обучалки на карте: {kind:"base"|"order"|"rover", id?}
 
 const STATUS = {
@@ -12,6 +12,13 @@ const STATUS = {
 };
 const riskColor = (r) => (r < 0.2 ? "#34d399" : r < 0.5 ? "#fbbf24" : "#f87171");
 const kg = (k) => (k >= 1000 ? (k / 1000).toFixed(1) + " т" : Math.round(k) + " кг");
+
+// Иконки (Lucide, MIT): inline SVG, работают офлайн
+const IC = {
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6 4l14 8-14 8z"/></svg>',
+  ff: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M4 5l8 7-8 7z"/><path d="M13 5l8 7-8 7z"/></svg>',
+};
 
 async function api(cmd, payload = {}) {
   try {
@@ -39,8 +46,8 @@ function render() {
   $("st-clock").textContent = d.time.clock;
   $("st-credits").textContent = d.credits + " ₵";
   $("st-rating").style.width = d.rating + "%";
-  $("btn-ff").textContent = d.time.ff ? "⏩⏩" : "⏩";
-  $("btn-pause").textContent = d.time.paused ? "▶" : "⏸";
+  $("btn-ff").innerHTML = d.time.ff ? IC.ff + IC.ff : IC.ff;
+  $("btn-pause").innerHTML = d.time.paused ? IC.play : IC.pause;
   $("btn-pause").classList.toggle("on", d.time.paused);
   $("btn-ff").disabled = d.time.paused;
   if (d.time.paused) $("st-clock").textContent = "⏸ " + d.time.clock;
@@ -76,7 +83,9 @@ function renderOrders(d) {
       <div class="mid"><span class="w">${kg(o.weight_kg)}</span><span class="r">+${o.reward}₵</span></div>
       <div class="risk"><i style="--dot:${riskColor(o.zone_risk)}"></i>риск ${Math.round(o.zone_risk * 100)}%</div>
       <div class="obar"><div style="width:${Math.max(0, Math.min(100, (left / o.urgent) * 100))}%"></div></div>`;
-    el.addEventListener("click", () => { state.selOrder = o.id; renderOrders(d); renderMission(d); });
+    el.addEventListener("click", () => { state.selOrder = o.id; state.hoverOrder = null; renderOrders(d); renderMission(d); });
+    el.addEventListener("mouseenter", () => { state.hoverOrder = o.id; renderMap(d); });
+    el.addEventListener("mouseleave", () => { state.hoverOrder = null; renderMap(d); });
     list.appendChild(el);
   }
 }
@@ -211,41 +220,46 @@ function buildBg(d, W, H) {
   const ox = (W - 1000 * S) / 2, oy = (H - 700 * S) / 2;
   const px2 = (x) => x * S + ox, py2 = (y) => y * S + oy;
 
-  // поверхность Луны: мягкий рельеф
-  const surf = cx.createRadialGradient(W * 0.5, H * 0.42, 60, W * 0.5, H * 0.42, Math.max(W, H) * 0.75);
-  surf.addColorStop(0, "#2a3856");
-  surf.addColorStop(0.55, "#1a2438");
-  surf.addColorStop(1, "#0b1120");
+  // поверхность Луны: светлый реголит
+  const surf = cx.createRadialGradient(W * 0.5, H * 0.45, 60, W * 0.5, H * 0.45, Math.max(W, H) * 0.75);
+  surf.addColorStop(0, "#aeb9c9");
+  surf.addColorStop(0.5, "#8b97ab");
+  surf.addColorStop(0.85, "#6d7a8f");
+  surf.addColorStop(1, "#5c687c");
   cx.fillStyle = surf; cx.fillRect(0, 0, W, H);
 
-  // лунные моря — большие тёмные пятна
+  // лунные моря — большие тёмно-серые пятна (мягкие)
   const seas = [[0.28, 0.32, 0.22], [0.68, 0.25, 0.18], [0.78, 0.62, 0.25], [0.35, 0.72, 0.17], [0.55, 0.45, 0.12]];
   seas.forEach(([sx, sy, sr]) => {
     const g = cx.createRadialGradient(W * sx, H * sy, 5, W * sx, H * sy, H * sr);
-    g.addColorStop(0, "rgba(8,14,28,.55)");
-    g.addColorStop(1, "rgba(8,14,28,0)");
+    g.addColorStop(0, "rgba(58,66,84,.5)");
+    g.addColorStop(1, "rgba(58,66,84,0)");
     cx.fillStyle = g; cx.fillRect(0, 0, W, H);
   });
 
   // лунный свет (блик сверху слева)
   const light = cx.createRadialGradient(W * 0.3, H * 0.2, 20, W * 0.3, H * 0.2, W * 0.9);
-  light.addColorStop(0, "rgba(190,210,240,.10)");
-  light.addColorStop(1, "rgba(190,210,240,0)");
+  light.addColorStop(0, "rgba(255,255,255,.16)");
+  light.addColorStop(1, "rgba(255,255,255,0)");
   cx.fillStyle = light; cx.fillRect(0, 0, W, H);
 
-  // кратеры: тень (дно) + светлая кромка со стороны света (верх слева)
+  // кратеры: светлая кромка (верх слева) + тёмная тень (низ справа)
   let seed = 7;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const crater = (cxp, cyp, cr) => {
+    // дно кратера
     cx.beginPath(); cx.arc(cxp, cyp, cr, 0, 7);
-    cx.fillStyle = "rgba(6,11,22,.42)"; cx.fill();
-    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.82, 0, 7);
-    cx.fillStyle = "rgba(3,6,14,.35)"; cx.fill();
-    cx.lineWidth = Math.max(1.2, cr * 0.16);
-    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.9, Math.PI, Math.PI * 1.5); // тёмная кромка (низ справа)
-    cx.strokeStyle = "rgba(4,8,18,.5)"; cx.stroke();
-    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.94, Math.PI * 1.5, Math.PI * 2.05); // светлая кромка (верх слева)
-    cx.strokeStyle = "rgba(190,210,240,.22)"; cx.stroke();
+    cx.fillStyle = "rgba(90,100,118,.65)"; cx.fill();
+    // внутренняя тень
+    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.78, 0, 7);
+    cx.fillStyle = "rgba(52,60,76,.55)"; cx.fill();
+    // светлая кромка (верх слева)
+    cx.lineWidth = Math.max(1.4, cr * 0.22);
+    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.92, Math.PI * 1.05, Math.PI * 1.95);
+    cx.strokeStyle = "rgba(235,242,250,.55)"; cx.stroke();
+    // тёмная кромка (низ справа)
+    cx.beginPath(); cx.arc(cxp, cyp, cr * 0.92, Math.PI * 1.95, Math.PI * 3.05);
+    cx.strokeStyle = "rgba(38,46,62,.5)"; cx.stroke();
   };
   const craters = [
     [100, 110, 30], [250, 90, 16], [400, 60, 42], [620, 100, 22], [800, 70, 34],
@@ -259,9 +273,9 @@ function buildBg(d, W, H) {
   for (let i = 0; i < 40; i++) crater(px2(30 + rnd() * 940), py2(30 + rnd() * 640), (2 + rnd() * 5) * S);
 
   // слабое виньетирование
-  const vin = cx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+  const vin = cx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
   vin.addColorStop(0, "rgba(0,0,0,0)");
-  vin.addColorStop(1, "rgba(0,0,0,.45)");
+  vin.addColorStop(1, "rgba(10,16,28,.35)");
   cx.fillStyle = vin; cx.fillRect(0, 0, W, H);
 
   drawBase(cx, px2(d.outposts.base.x), py2(d.outposts.base.y), S);
@@ -325,6 +339,20 @@ function renderMap(d) {
       ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
       ctx.beginPath(); ctx.arc(ex, ey, 11 * S, 0, 7); ctx.stroke(); ctx.setLineDash([]);
     }
+    // наведение на заказ — подсветка пункта доставки
+    if (state.hoverOrder && state.hoverOrder === o.id) {
+      ctx.font = "700 11px Exo 2, Segoe UI";
+      ctx.fillStyle = "#38bdf8"; ctx.textAlign = "center";
+      ctx.fillText("▼ сюда доставить", ex, ey + 14 * S);
+      const hpx = px(d.outposts.base.x), hpy = py(d.outposts.base.y);
+      ctx.beginPath(); ctx.moveTo(hpx, hpy); ctx.lineTo(ex, ey);
+      ctx.strokeStyle = "rgba(56,189,248,.45)"; ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]);
+      ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 2; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.arc(ex, ey, 15 * S, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      ctx.globalAlpha = .25; ctx.beginPath(); ctx.arc(ex, ey, 15 * S, 0, 7); ctx.fillStyle = "#38bdf8";
+      ctx.fill(); ctx.globalAlpha = 1;
+    }
   });
 
   // роверы (плавная интерполяция между поллингами)
@@ -341,14 +369,17 @@ function renderMap(d) {
       const oo = d.outposts[r.journey.outpost];
       ctx.strokeStyle = "rgba(56,189,248,.18)"; ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 5]);
-      ctx.beginPath(); ctx.moveTo(px(oo.x), py(oo.y)); ctx.lineTo(rx, ry); ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.beginPath();
+      if (r.path && r.path.length > 1) {
+        ctx.moveTo(px(r.path[0][0]), py(r.path[0][1]));
+        for (let i = 1; i < r.path.length; i++) ctx.lineTo(px(r.path[i][0]), py(r.path[i][1]));
+      } else {
+        ctx.moveTo(px(oo.x), py(oo.y)); ctx.lineTo(rx, ry);
+      }
+      ctx.stroke(); ctx.setLineDash([]);
     }
     const inSel = selR && selR.id === r.id;
-    const moving = r.status === "delivering" || r.status === "returning";
-    const wob = moving ? Math.sin(nowMs / 120) * 1.2 * S : 0;
-    const wob2 = moving ? Math.cos(nowMs / 160) * 1.2 * S : 0;
-    ctx.beginPath(); ctx.arc(rx + wob, ry + wob2, (inSel ? 8.5 : 6.5) * S, 0, 7);
+    ctx.beginPath(); ctx.arc(rx, ry, (inSel ? 8.5 : 6.5) * S, 0, 7);
     ctx.fillStyle = "#0e1626"; ctx.fill();
     ctx.strokeStyle = r.status === "stranded" ? "#f87171" : r.status === "idle" ? "#34d399" : "#38bdf8";
     ctx.lineWidth = 2; ctx.stroke();

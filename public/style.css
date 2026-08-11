@@ -37,6 +37,12 @@ button.icon:disabled{opacity:.45;cursor:not-allowed}
 button.ghost{background:transparent;border:1px solid var(--line);color:var(--dim);height:34px;padding:0 16px;
   border-radius:10px;font-size:13px;transition:.15s}
 button.ghost:hover{color:var(--bad);border-color:rgba(248,113,113,.5)}
+button.icon svg,button.ghost svg{width:17px;height:17px;display:inline-block;vertical-align:-3px}
+button.ghost svg{margin-right:7px}
+button.icon.sm svg{width:14px;height:14px;vertical-align:-2px}
+button.icon.sm{width:26px;height:26px;font-size:13px;border-radius:8px}
+.pane-btns{display:inline-flex;gap:4px;float:right}
+.pane-btns{display:inline-flex;gap:4px;float:right}
 
 #layout{flex:1;display:grid;grid-template-columns:280px 1fr 300px;gap:12px;padding:12px;min-height:0}
 .side{background:var(--glass);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:var(--r);
@@ -153,8 +159,7 @@ button.ghost:hover{color:var(--bad);border-color:rgba(248,113,113,.5)}
 .score .sc b.good{color:var(--good)} .score .sc b.warn{color:var(--warn)}
 .score .sc span{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
 
-/* --- кнопка флота --- */
-button.icon.sm{width:26px;height:26px;font-size:13px;border-radius:8px}
+/* --- кнопки панели роверов --- */
 
 /* --- флот: улучшения и магазин --- */
 .f-h{font-size:13px;font-weight:600;color:var(--txt);margin:14px 0 6px;display:flex;justify-content:space-between}

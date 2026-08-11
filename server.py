@@ -220,29 +220,204 @@ def dist_km(x0, y0, x1, y1):
     return math.hypot(x1 - x0, y1 - y0) * SCALE_KM
 
 
+# ----------------------------------------------------------------------------
+# Маршруты: объезд кратеров и активных бурь (A* по сетке)
+# ----------------------------------------------------------------------------
+
+# Кратеры в координатах карты (x, y, радиус) — совпадают с отрисовкой клиента
+CRATERS = [
+    (100, 110, 30), (250, 90, 16), (400, 60, 42), (620, 100, 22), (800, 70, 34),
+    (930, 140, 18), (60, 260, 20), (300, 240, 12), (520, 200, 28), (730, 230, 15),
+    (880, 300, 40), (140, 400, 26), (330, 380, 34), (560, 360, 14), (690, 420, 30),
+    (860, 500, 20), (240, 540, 40), (450, 520, 24), (620, 560, 16), (780, 590, 30),
+    (120, 620, 14), (380, 640, 22), (900, 620, 26), (520, 660, 12),
+]
+PATH_GRID = 25.0           # шаг сетки, px
+PATH_CLEAR = 12.0          # запас вокруг кратера/бури, px
+
+
+def _cell_center(ci, cj):
+    return (ci * PATH_GRID + PATH_GRID / 2, cj * PATH_GRID + PATH_GRID / 2)
+
+
+def _cell_blocked(ci, cj, storm_polys):
+    cx, cy = _cell_center(ci, cj)
+    for (x, y, r) in CRATERS:
+        if math.hypot(cx - x, cy - y) < r + PATH_CLEAR:
+            return True
+    for poly in storm_polys:
+        if point_in_poly(cx, cy, poly):
+            return True
+    return False
+
+
+def _seg_clear(x0, y0, x1, y1, storm_polys):
+    """Проверяет, что отрезок не пересекает кратеры и бури."""
+    d = math.hypot(x1 - x0, y1 - y0)
+    n = max(1, int(d / 8))
+    for i in range(n + 1):
+        t = i / n
+        px = x0 + (x1 - x0) * t
+        py = y0 + (y1 - y0) * t
+        for (x, y, r) in CRATERS:
+            if math.hypot(px - x, py - y) < r + PATH_CLEAR - 4:
+                return False
+        for poly in storm_polys:
+            if point_in_poly(px, py, poly):
+                return False
+    return True
+
+
+def _nearest_free(ci, cj, cols, rows, storm_polys):
+    """Ближайшая свободная клетка (если старт/цель в препятствии)."""
+    if not _cell_blocked(ci, cj, storm_polys):
+        return (ci, cj)
+    for r in range(1, max(cols, rows)):
+        for di in range(-r, r + 1):
+            for dj in (-r, r):
+                ni, nj = ci + di, cj + dj
+                if 0 <= ni < cols and 0 <= nj < rows and not _cell_blocked(ni, nj, storm_polys):
+                    return (ni, nj)
+        for dj in range(-r + 1, r):
+            for di in (-r, r):
+                ni, nj = ci + di, cj + dj
+                if 0 <= ni < cols and 0 <= nj < rows and not _cell_blocked(ni, nj, storm_polys):
+                    return (ni, nj)
+    return (ci, cj)
+
+
+def _a_star(x0, y0, x1, y1, storm_polys):
+    """Ищет путь вокруг препятствий. Возвращает список клеток (ci, cj) или None."""
+    cols = int(round(1000.0 / PATH_GRID))
+    rows = int(round(700.0 / PATH_GRID))
+    def cell(x): return int(min(max(x / PATH_GRID, 0), cols - 1))
+    s = _nearest_free(cell(x0), cell(y0), cols, rows, storm_polys)
+    e = _nearest_free(cell(x1), cell(y1), cols, rows, storm_polys)
+    if s == e:
+        return [s]
+    import heapq
+    def h(ci, cj): return math.hypot(ci - e[0], cj - e[1])
+    g = {s: 0.0}
+    prev = {}
+    open_heap = [(h(*s), 0.0, s)]
+    closed = set()
+    while open_heap:
+        _, gc, cur = heapq.heappop(open_heap)
+        if cur in closed:
+            continue
+        closed.add(cur)
+        if cur == e:
+            break
+        for di, dj, w in ((1, 0, 1), (-1, 0, 1), (0, 1, 1), (0, -1, 1),
+                          (1, 1, 1.414), (1, -1, 1.414), (-1, 1, 1.414), (-1, -1, 1.414)):
+            ni, nj = cur[0] + di, cur[1] + dj
+            if ni < 0 or nj < 0 or ni >= cols or nj >= rows:
+                continue
+            nxt = (ni, nj)
+            if nxt in closed or _cell_blocked(ni, nj, storm_polys):
+                continue
+            ng = gc + w
+            if ng < g.get(nxt, 1e18):
+                g[nxt] = ng
+                prev[nxt] = cur
+                heapq.heappush(open_heap, (ng + h(ni, nj), ng, nxt))
+    if e not in g:
+        return None
+    path = []
+    cur = e
+    while cur in prev:
+        path.append(cur)
+        cur = prev[cur]
+    path.append(s)
+    path.reverse()
+    return path
+
+
+def _smooth_path(path, storm_polys):
+    """Превращает клетки A* в полилинию точек и убирает лишние углы."""
+    if not path:
+        return []
+    pts = [_cell_center(ci, cj) for (ci, cj) in path]
+    if len(pts) <= 2:
+        return pts
+    # «спрямление»: убираем точки, если отрезок вокруг не пересекает препятствия
+    res = [pts[0]]
+    i = 0
+    while i < len(pts) - 1:
+        j = len(pts) - 1
+        while j > i + 1:
+            if _seg_clear(pts[i][0], pts[i][1], pts[j][0], pts[j][1], storm_polys):
+                break
+            j -= 1
+        res.append(pts[j])
+        i = j
+    return res
+
+
+def route_points(x0, y0, x1, y1):
+    """Полилиния маршрута от (x0,y0) к (x1,y1) с объездом кратеров и активных бурь."""
+    storms = active_storms()
+    storm_polys = [ZONES[zid]["poly"] for zid in storms]
+    direct = [(x0, y0), (x1, y1)]
+    if _seg_clear(x0, y0, x1, y1, storm_polys):
+        return direct
+    path = _a_star(x0, y0, x1, y1, storm_polys)
+    if not path:
+        return direct
+    pts = _smooth_path(path, storm_polys)
+    pts[0] = (x0, y0)
+    pts[-1] = (x1, y1)
+    return pts
+
+
+def _seg_lens(pts):
+    out = []
+    for i in range(len(pts) - 1):
+        out.append(math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]))
+    return out
+
+
+def point_along(pts, seg_lens, frac):
+    """Точка на полилинии на доле frac её полной длины."""
+    total = sum(seg_lens)
+    if total <= 0:
+        return pts[0]
+    tgt = frac * total
+    acc = 0.0
+    for i in range(len(seg_lens)):
+        d = seg_lens[i]
+        if acc + d >= tgt and d > 0:
+            u = (tgt - acc) / d
+            return (pts[i][0] + (pts[i + 1][0] - pts[i][0]) * u,
+                    pts[i][1] + (pts[i + 1][1] - pts[i][1]) * u)
+        acc += d
+    return pts[-1]
+
+
 def zone_bonus(zid):
     return ZONES[zid]["bonus"]
 
 
 def path_profile(x0, y0, x1, y1, weight_kg, rover):
-    """Считает полный профиль пути: километраж, время (мин), энергию (Вт*ч)."""
-    total_km = dist_km(x0, y0, x1, y1)
+    """Считает полный профиль пути с объездом кратеров и бурь.
+    Возвращает (total_km, time_min, acc_energy, pts)."""
+    pts = route_points(x0, y0, x1, y1)
+    lens = _seg_lens(pts)
+    total_km = sum(lens) * SCALE_KM
     if total_km < 0.01:
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, pts
     n = max(2, int(total_km / 0.25))
     acc_speed = 0.0
     acc_energy = 0.0
     for i in range(n + 1):
-        t = i / n
-        px = x0 + (x1 - x0) * t
-        py = y0 + (y1 - y0) * t
+        px, py = point_along(pts, lens, i / n)
         zid = zone_at(px, py)
         z = ZONES.get(zid, {"speed": 1.0, "energy": 1.0})
         seg = total_km / n
         acc_speed += seg / z["speed"]
         acc_energy += seg * z["energy"] * (rover["base_e"] + rover["kw"] * weight_kg)
     time_min = acc_speed / rover["speed_kmh"] * 60.0  # результат в минутах
-    return total_km, time_min, acc_energy
+    return total_km, time_min, acc_energy, pts
 
 
 def seed_orders(sample=None):
@@ -437,12 +612,12 @@ def estimate_mission(order, rover):
     cfg = {"speed_kmh": r["speed_kmh"], "base_e": r.get("base_e", 1.2), "kw": r.get("kw", 0.004)}
     prof = path_profile(r["x"], r["y"], OUTPOSTS[order["outpost"]]["x"], OUTPOSTS[order["outpost"]]["y"],
                         order["weight_kg"], cfg)
-    out_km, out_min, out_e = prof
+    out_km, out_min, out_e, pts = prof
     total_e = out_e * 2           # туда и обратно
     if total_e > r["batt"] + REQ_BATTERY_EPS:
         return False, ("Не хватит батареи: требуется %.0f Вт*ч, у ровера %.0f Вт*ч (включая обратный путь)." %
                        (total_e, r["batt"])), None
-    return True, "", {"out_km": out_km, "out_min": out_min, "out_e": out_e, "total_e": total_e}
+    return True, "", {"out_km": out_km, "out_min": out_min, "out_e": out_e, "total_e": total_e, "pts": pts}
 
 
 def launch(rover_id, order_id):
@@ -469,6 +644,8 @@ def launch(rover_id, order_id):
         "batt_at_start": r["batt"],
         "base_x": OUTPOSTS["base"]["x"],
         "base_y": OUTPOSTS["base"]["y"],
+        "path": [list(p) for p in prof["pts"]],
+        "path_len": sum(_seg_lens(prof["pts"])),
     }
     order["status"] = "in_transit"
     order["rover_id"] = rover_id
@@ -484,7 +661,6 @@ def tick_deliveries(dt_min):
         j = r["journey"]
         if not j or r["status"] not in ("delivering", "returning"):
             continue
-        out = OUTPOSTS[j["outpost"]]
         bx, by = j["base_x"], j["base_y"]
         remaining = dt_min
         guard = 0
@@ -498,13 +674,8 @@ def tick_deliveries(dt_min):
             j["e_spent"] += j["out_e"] * frac
             r["batt"] = max(0.0, j["batt_at_start"] - j["e_spent"])
             remaining -= used
-            # позиция по текущей фазе
-            if j["phase"] == "out":
-                r["x"] = bx + (out["x"] - bx) * j["progress"]
-                r["y"] = by + (out["y"] - by) * j["progress"]
-            else:
-                r["x"] = out["x"] + (bx - out["x"]) * j["progress"]
-                r["y"] = out["y"] + (by - out["y"]) * j["progress"]
+            # позиция по текущей фазе (по полилинии пути с объездом)
+            r["x"], r["y"] = interpolate(j, r)
             if r["batt"] <= 0:
                 strand(r, j)
                 break
@@ -521,11 +692,17 @@ def tick_deliveries(dt_min):
         maybe_event(r, j, dt_min)
 
 
-def interpolate(phase, progress, out, r):
-    bx, by = OUTPOSTS["base"]["x"], OUTPOSTS["base"]["y"]
-    if phase == "out":
-        return bx + (out["x"] - bx) * progress, by + (out["y"] - by) * progress
-    return out["x"] + (bx - out["x"]) * progress, out["y"] + (by - out["y"]) * progress
+def interpolate(j, r=None):
+    """Позиция ровера на полилинии пути по текущему прогрессу фазы."""
+    bx, by = j["base_x"], j["base_y"]
+    out = OUTPOSTS[j["outpost"]]
+    pts = j.get("path")
+    if not pts:
+        if j["phase"] == "out":
+            return bx + (out["x"] - bx) * j["progress"], by + (out["y"] - by) * j["progress"]
+        return out["x"] + (bx - out["x"]) * j["progress"], out["y"] + (by - out["y"]) * j["progress"]
+    ordered = pts if j["phase"] == "out" else list(reversed(pts))
+    return point_along(ordered, _seg_lens(ordered), j["progress"])
 
 
 def maybe_event(r, j, dt_min):
@@ -834,6 +1011,7 @@ def public_state():
             r["progress"] = round(j["progress"], 3)
             r["e_spent"] = round(j["e_spent"], 1)
             r["trip_est_min"] = int(j["out_min"] * 2)
+            r["path"] = j.get("path")
     orders = sorted(DB["orders.json"].values(), key=lambda o: o["expires_at"])
     storms = {k: int(v) for k, v in STATE["storms"].items() if v > STATE["minute_total"]}
     total_done = sum(x["done"] for x in DB["rovers.json"].values())

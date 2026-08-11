@@ -72,6 +72,7 @@ function closeTutorial() {
   window.tutMapScreen = null;
   clearTutGlow();
   $("tut").classList.add("hidden");
+  localStorage.setItem("mcs_tut", "1");  // обучение показано — больше не показываем
 }
 function tutStep() { return TUT[tut.step]; }
 
@@ -205,14 +206,15 @@ $("tut-next").addEventListener("click", () => {
 });
 $("tut-skip").addEventListener("click", closeTutorial);
 $("btn-help").addEventListener("click", startTutorial);
+// обучение — только при первом входе (флаг ставится при завершении/пропуске)
 if (!localStorage.getItem("mcs_tut")) {
-  localStorage.setItem("mcs_tut", "1");
   setTimeout(startTutorial, 600);
 }
 
 /* ===================== ФЛОТ ===================== */
 
 $("btn-fleet").addEventListener("click", showFleet);
+$("btn-shop").addEventListener("click", showShop);
 
 function showFleet() {
   const d = state.data; if (!d) return;
@@ -243,33 +245,53 @@ function showFleet() {
     html += `</div>`;
   }
 
-  html += `<div class="f-h">Верфь <span class="fr">новые модели · витрина обновляется</span></div>`;
-  for (const m of d.fleet_shop) {
-    html += `
-      <div class="f-shop">
-        <div class="nm">${m.name} <small>· ${m.model}</small></div>
-        <div class="dst">груз ${m.cap_kg} кг · батарея ${m.batt} Вт·ч · скорость ${m.speed_kmh} км/ч</div>
-        <div class="sp"><span>стоимость <b>${m.cost}₵</b></span><span>нужно доставок <b>${m.min_done}</b></span></div>
-        <button class="buy ${m.unlocked ? "ok" : "lock"}" data-fa="buy" data-m="${m.id}" ${m.unlocked ? "" : "disabled"}>
-          ${m.unlocked ? `Купить за ${m.cost}₵` : `Доступно после ${m.min_done} доставок`}
-        </button>
-      </div>`;
-  }
-
   html += `<button onclick="hideModal()">Закрыть</button>`;
   showModal(html);
 
-  document.querySelectorAll("[data-fa]").forEach((b) => {
+  document.querySelectorAll("[data-fa='upgrade']").forEach((b) => {
     b.addEventListener("click", async () => {
-      const res = b.dataset.fa === "upgrade"
-        ? await api("upgrade", { rover_id: b.dataset.r, stat: b.dataset.u })
-        : await api("buy_rover", { shop_id: b.dataset.m });
+      const res = await api("upgrade", { rover_id: b.dataset.r, stat: b.dataset.u });
       if (res && !res.ok) {
         document.querySelector("#modal .f-h")?.insertAdjacentHTML("afterend", `<div class="err">${res.error}</div>`);
         return;
       }
       await poll();
       showFleet();
+    });
+  });
+}
+
+function showShop() {
+  const d = state.data; if (!d) return;
+  let html = `<h2>🛒 Верфь</h2>
+    <div class="score" style="margin:6px 0 0">
+      <div class="sc"><b class="good">${d.credits}</b><span>₵ в наличии</span></div>
+      <div class="sc"><b>${d.total_done}</b><span>доставок</span></div>
+    </div>
+    <div class="f-h">Новые модели <span class="fr">витрина обновляется каждые 35–70 мин</span></div>`;
+  for (const m of d.fleet_shop) {
+    html += `
+      <div class="f-shop">
+        <div class="nm">${m.name} <small>· ${m.model}</small></div>
+        <div class="dst">груз ${m.cap_kg} кг · батарея ${m.batt} Вт·ч · скорость ${m.speed_kmh} км/ч</div>
+        <div class="sp"><span>стоимость <b>${m.cost}₵</b></span><span>нужно доставок <b>${m.min_done}</b></span></div>
+        <button class="buy ${m.unlocked ? "ok" : "lock"}" data-m="${m.id}" ${m.unlocked ? "" : "disabled"}>
+          ${m.unlocked ? `Купить за ${m.cost}₵` : `Доступно после ${m.min_done} доставок`}
+        </button>
+      </div>`;
+  }
+  html += `<button onclick="hideModal()">Закрыть</button>`;
+  showModal(html);
+
+  document.querySelectorAll("[data-m]").forEach((b) => {
+    b.addEventListener("click", async () => {
+      const res = await api("buy_rover", { shop_id: b.dataset.m });
+      if (res && !res.ok) {
+        document.querySelector("#modal .f-h")?.insertAdjacentHTML("afterend", `<div class="err">${res.error}</div>`);
+        return;
+      }
+      await poll();
+      showShop();
     });
   });
 }
