@@ -6,6 +6,7 @@ moonTex.src = "/static/assets/moon_texture.jpg";
 
 const $ = (id) => document.getElementById(id);
 const state = { selOrder: null, selRover: null, data: null };
+window.tutMap = null; // цель подсветки обучалки на карте: {kind:"base"|"order"|"rover", id?}
 
 const STATUS = {
   idle: ["st-idle", "свободен"], delivering: ["st-busy", "в пути"],
@@ -36,6 +37,10 @@ function render() {
   $("st-credits").textContent = d.credits + " ₵";
   $("st-rating").style.width = d.rating + "%";
   $("btn-ff").textContent = d.time.ff ? "⏩⏩" : "⏩";
+  $("btn-pause").textContent = d.time.paused ? "▶" : "⏸";
+  $("btn-pause").classList.toggle("on", d.time.paused);
+  $("btn-ff").disabled = d.time.paused;
+  if (d.time.paused) $("st-clock").textContent = "⏸ " + d.time.clock;
   renderOrders(d); renderRovers(d); renderMission(d); renderLog(d); renderMap(d);
   tutTick(d);
   if (d.gameover) showGameOver(d);
@@ -297,6 +302,32 @@ function renderMap(d) {
   });
 
   if (night) { ctx.fillStyle = "rgba(10,20,45,.16)"; ctx.fillRect(0, 0, W, H); }
+
+  // подсветка цели обучалки на карте
+  if (window.tutMap) {
+    const tm = window.tutMap;
+    let tx = null, ty = null;
+    if (tm.kind === "base") { tx = d.outposts.base.x; ty = d.outposts.base.y; }
+    else if (tm.kind === "order") {
+      const o = d.orders.find((x) => x.id === tm.id);
+      if (o && d.outposts[o.outpost]) { tx = d.outposts[o.outpost].x; ty = d.outposts[o.outpost].y; }
+    } else if (tm.kind === "rover") {
+      const r = d.rovers.find((x) => x.id === tm.id);
+      if (r) { tx = r.x; ty = r.y; }
+    }
+    if (tx != null) {
+      const t = performance.now() / 1000;
+      const R = (14 + Math.sin(t * 4)) * S;
+      const gx = px(tx), gy = py(ty);
+      window.tutMapScreen = { x: gx + canvas.getBoundingClientRect().left, y: gy + canvas.getBoundingClientRect().top };
+      ctx.beginPath(); ctx.arc(gx, gy, R, 0, 7);
+      ctx.strokeStyle = "rgba(56,189,248,.85)"; ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(gx, gy, R + 5, 0, 7);
+      ctx.strokeStyle = "rgba(56,189,248,.25)"; ctx.lineWidth = 6; ctx.stroke();
+      ctx.font = "700 13px Exo 2, Segoe UI"; ctx.fillStyle = "#38bdf8"; ctx.textAlign = "center";
+      ctx.fillText("▶", gx, gy - R - 8 * S);
+    }
+  }
 }
 function drawBase(ctx, x, y, S) {
   ctx.beginPath(); ctx.arc(x, y, 8 * S, 0, 7);
@@ -351,6 +382,10 @@ function hideModal() { $("overlay").classList.add("hidden"); }
 /* -------- кнопки -------- */
 $("btn-ff").addEventListener("click", async () => {
   await api("fast_forward", { on: !state.data.time.ff });
+  poll();
+});
+$("btn-pause").addEventListener("click", async () => {
+  await api("pause", {});
   poll();
 });
 $("btn-reset").addEventListener("click", async () => {

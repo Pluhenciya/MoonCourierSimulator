@@ -65,6 +65,7 @@ function startTutorial() {
 }
 function closeTutorial() {
   tut.active = false;
+  window.tutMap = null;
   clearTutGlow();
   $("tut").classList.add("hidden");
 }
@@ -101,6 +102,42 @@ function tutRender() {
       if (tut.scrollStep !== tut.step) { tut.scrollStep = tut.step; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
     }
   }
+  window.tutMap = tutMapFor(state.data);
+  tutPlace();
+}
+
+// позиционирует пузырь тутора рядом с целью (DOM-элемент или точка на карте), со стрелкой
+function tutPlace() {
+  const box = $("tut");
+  const s = tutStep();
+  box.classList.remove("placed", "t-above", "t-below", "t-left", "t-right");
+  let r = null;
+  const el = s.target ? findTutTarget(s.target) : null;
+  if (el && s.target !== "#map-wrap") {
+    r = el.getBoundingClientRect();
+  } else if (window.tutMapScreen) {
+    r = { left: window.tutMapScreen.x, top: window.tutMapScreen.y, right: window.tutMapScreen.x, bottom: window.tutMapScreen.y, width: 0, height: 0 };
+  }
+  if (!r) return;
+  const W = box.offsetWidth, H = box.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight, gap = 16;
+  if (r.top - H - gap > 4) {
+    box.classList.add("placed", "t-above");
+    box.style.left = Math.min(Math.max(r.left + r.width / 2 - W / 2, 10), vw - W - 10) + "px";
+    box.style.top = (r.top - H - gap) + "px";
+  } else if (vh - r.bottom - H - gap > 4) {
+    box.classList.add("placed", "t-below");
+    box.style.left = Math.min(Math.max(r.left + r.width / 2 - W / 2, 10), vw - W - 10) + "px";
+    box.style.top = (r.bottom + gap) + "px";
+  } else if (r.left - W - gap > 4) {
+    box.classList.add("placed", "t-left");
+    box.style.top = Math.min(Math.max(r.top + r.height / 2 - H / 2, 10), vh - H - 10) + "px";
+    box.style.left = (r.left - W - gap) + "px";
+  } else {
+    box.classList.add("placed", "t-right");
+    box.style.top = Math.min(Math.max(r.top + r.height / 2 - H / 2, 10), vh - H - 10) + "px";
+    box.style.left = (r.right + gap) + "px";
+  }
 }
 function findTutTarget(sel) {
   if (sel === "#orders-list") return $("orders-list");
@@ -113,6 +150,33 @@ function findTutTarget(sel) {
   return document.querySelector(sel);
 }
 function clearTutGlow() { document.querySelectorAll(".tut-glow").forEach((e) => e.classList.remove("tut-glow")); }
+
+// куда показать на карте: {kind:"base"|"order"|"rover", id}
+function tutMapFor(d) {
+  if (!d) return null;
+  switch (tut.step) {
+    case 1: { // Заказы — самый срочный доступный
+      const list = d.orders.filter((o) => o.status === "available");
+      if (!list.length) return null;
+      const urgent = list.reduce((a, b) => (b.expires_at < a.expires_at ? b : a));
+      return { kind: "order", id: urgent.id };
+    }
+    case 2: { // Роверы — первый свободный
+      const r = d.rovers.find((x) => x.status === "idle" || x.status === "maintenance");
+      return r ? { kind: "rover", id: r.id } : null;
+    }
+    case 3: return { kind: "base" }; // Карта и зоны — база
+    case 4: { // Расчёт миссии — выбранный заказ
+      const o = d.orders.find((x) => x.id === state.selOrder);
+      return o ? { kind: "order", id: o.id } : null;
+    }
+    case 5: { // Запуск доставки — выбранный заказ
+      const o = d.orders.find((x) => x.id === state.selOrder);
+      return o ? { kind: "order", id: o.id } : null;
+    }
+    default: return null;
+  }
+}
 
 function tutTick() {
   if (!tut.active) return;

@@ -32,6 +32,8 @@ button{font-family:inherit;cursor:pointer}
 button.icon{background:transparent;border:1px solid var(--line);color:var(--dim);width:34px;height:34px;
   border-radius:10px;font-size:15px;transition:.15s}
 button.icon:hover{color:var(--txt);border-color:var(--line2);background:var(--glass2)}
+button.icon.on{color:#0d1526;border-color:#38bdf8;background:linear-gradient(135deg,#38bdf8,#0284c7)}
+button.icon:disabled{opacity:.45;cursor:not-allowed}
 button.ghost{background:transparent;border:1px solid var(--line);color:var(--dim);height:34px;padding:0 16px;
   border-radius:10px;font-size:13px;transition:.15s}
 button.ghost:hover{color:var(--bad);border-color:rgba(248,113,113,.5)}
@@ -182,6 +184,12 @@ button.icon.sm{width:26px;height:26px;font-size:13px;border-radius:8px}
   background:rgba(14,22,38,.92);backdrop-filter:blur(10px);border:1px solid var(--accline,var(--line2));
   border-radius:16px;box-shadow:0 18px 50px rgba(0,0,0,.5);padding:16px 18px 14px;z-index:70}
 #tut.hidden{display:none}
+#tut.placed{left:auto;bottom:auto;transform:none;width:460px}
+#tut::after{content:"";position:absolute;width:0;height:0;border:10px solid transparent}
+#tut.t-above::after{bottom:-20px;left:50%;margin-left:-10px;border-top:12px solid rgba(14,22,38,.96);border-bottom:0}
+#tut.t-below::after{top:-20px;left:50%;margin-left:-10px;border-bottom:12px solid rgba(14,22,38,.96);border-top:0}
+#tut.t-left::after{right:-20px;top:50%;margin-top:-10px;border-left:12px solid rgba(14,22,38,.96);border-right:0}
+#tut.t-right::after{left:-20px;top:50%;margin-top:-10px;border-right:12px solid rgba(14,22,38,.96);border-left:0}
 .tut-dots{display:flex;gap:6px;margin-bottom:10px}
 .tut-dots .dot{width:7px;height:7px;border-radius:50%;background:rgba(148,163,184,.3)}
 .tut-dots .dot.on{background:var(--acc)}

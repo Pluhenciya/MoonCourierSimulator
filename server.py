@@ -237,6 +237,7 @@ def seed_game():
         "credits": START_CREDITS,
         "rating": START_RATING,
         "ff": False,
+        "paused": False,
         "gameover": False,
         "gameover_reason": "",
         "end_after_day": DAYS_TO_SURVIVE,
@@ -615,6 +616,10 @@ def action_cmd(name, payload):
     if name == "fast_forward":
         STATE["ff"] = bool(payload.get("on"))
         return {"ok": True}
+    if name == "pause":
+        on = payload.get("on")
+        STATE["paused"] = bool(payload.get("on")) if on is not None else not STATE.get("paused", False)
+        return {"ok": True, "paused": STATE["paused"]}
     if name == "upgrade":
         rid = payload.get("rover_id")
         r = DB["rovers.json"].get(rid)
@@ -677,7 +682,7 @@ def sim_loop():
         dt_real = 0.25
         time.sleep(dt_real)
         dt_min = GAME_MIN_PER_SEC * dt_real * (FF_MULT if STATE and STATE["ff"] else 1.0)
-        if STATE and not STATE["gameover"]:
+        if STATE and not STATE["gameover"] and not STATE.get("paused"):
             with lock:
                 simulate_step(dt_min)
                 now = time.time()
@@ -789,6 +794,7 @@ def public_state():
             "clock": clock_text(STATE["minute_total"]),
             "minute_total": STATE["minute_total"],
             "ff": STATE["ff"],
+            "paused": STATE.get("paused", False),
             "days_total": DAYS_TO_SURVIVE,
         },
         "credits": STATE["credits"],
