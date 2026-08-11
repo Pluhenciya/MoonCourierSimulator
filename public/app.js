@@ -5,7 +5,7 @@ const moonTex = new Image();
 moonTex.src = "/static/assets/moon_texture.jpg";
 
 const $ = (id) => document.getElementById(id);
-const state = { selOrder: null, selRover: null, data: null };
+const state = { selOrder: null, selRover: null, data: null, roverPrev: {} };
 window.tutMap = null; // цель подсветки обучалки на карте: {kind:"base"|"order"|"rover", id?}
 
 const STATUS = {
@@ -26,8 +26,14 @@ async function api(cmd, payload = {}) {
   } catch { return { ok: false, error: "нет связи с сервером" }; }
 }
 async function poll() {
-  try { state.data = await (await fetch("/api/state", { cache: "no-store" })).json(); render(); }
-  catch { /* сервер не готов */ }
+  try {
+    if (state.data) {
+      const t = performance.now();
+      state.data.rovers.forEach((r) => { state.roverPrev[r.id] = { x: r.x, y: r.y, t }; });
+    }
+    state.data = await (await fetch("/api/state", { cache: "no-store" })).json();
+    render();
+  } catch { /* сервер не готов */ }
 }
 
 function render() {
@@ -233,15 +239,16 @@ function renderMap(d) {
   const night = hour < 360 || hour >= 1200;
 
   // зоны
+  const stormGlow = (Math.sin(performance.now() / 300) + 1) / 2;
   d.zone_order.forEach((zid) => {
     const z = d.zones[zid];
     const storm = d.storms[zid];
     ctx.beginPath();
     z.poly.forEach(([x, y], i) => i ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y)));
     ctx.closePath();
-    ctx.fillStyle = storm ? "rgba(248,113,113,.10)" : "rgba(148,163,184,.045)";
+    ctx.fillStyle = storm ? "rgba(248,113,113," + (0.06 + stormGlow * 0.08) + ")" : "rgba(148,163,184,.045)";
     ctx.fill();
-    ctx.strokeStyle = storm ? "rgba(248,113,113,.8)" : riskColor(z.risk) + "55";
+    ctx.strokeStyle = storm ? "rgba(248,113,113," + (0.55 + stormGlow * 0.4) + ")" : riskColor(z.risk) + "55";
     ctx.lineWidth = 1;
     ctx.setLineDash(storm ? [5, 5] : []);
     ctx.stroke();
@@ -276,10 +283,16 @@ function renderMap(d) {
     }
   });
 
-  // роверы
+  // роверы (плавная интерполяция между поллингами)
   const selR = d.rovers.find((x) => x.id === state.selRover);
+  const nowMs = performance.now();
   d.rovers.forEach((r) => {
-    const rx = px(r.x), ry = py(r.y);
+    const pv = state.roverPrev[r.id];
+    const dx = r.x - (pv ? pv.x : r.x), dy = r.y - (pv ? pv.y : r.y);
+    const teleport = !pv || Math.hypot(dx, dy) > 30;
+    const a = teleport || !pv ? 1 : Math.min(1, (nowMs - pv.t) / 800);
+    const rx = px(pv && !teleport ? pv.x + dx * a : r.x);
+    const ry = py(pv && !teleport ? pv.y + dy * a : r.y);
     if (r.journey) {
       const oo = d.outposts[r.journey.outpost];
       ctx.strokeStyle = "rgba(56,189,248,.18)"; ctx.lineWidth = 1.5;
@@ -288,7 +301,10 @@ function renderMap(d) {
       ctx.setLineDash([]);
     }
     const inSel = selR && selR.id === r.id;
-    ctx.beginPath(); ctx.arc(rx, ry, (inSel ? 8.5 : 6.5) * S, 0, 7);
+    const moving = r.status === "delivering" || r.status === "returning";
+    const wob = moving ? Math.sin(nowMs / 120) * 1.2 * S : 0;
+    const wob2 = moving ? Math.cos(nowMs / 160) * 1.2 * S : 0;
+    ctx.beginPath(); ctx.arc(rx + wob, ry + wob2, (inSel ? 8.5 : 6.5) * S, 0, 7);
     ctx.fillStyle = "#0e1626"; ctx.fill();
     ctx.strokeStyle = r.status === "stranded" ? "#f87171" : r.status === "idle" ? "#34d399" : "#38bdf8";
     ctx.lineWidth = 2; ctx.stroke();
@@ -394,3 +410,14 @@ $("btn-reset").addEventListener("click", async () => {
 
 poll();
 setInterval(poll, 800);
+
+// плавная анимация карты между поллингами
+let lastRaf = 0;
+function rafLoop(ts) {
+  requestAnimationFrame(rafLoop);
+  if (!state.data || document.hidden) return;
+  if (ts - lastRaf < 40) return; // ~25 fps достаточно
+  lastRaf = ts;
+  renderMap(state.data);
+}
+requestAnimationFrame(rafLoop);
