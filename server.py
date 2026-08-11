@@ -250,6 +250,7 @@ def seed_game():
             "id": rid, "name": r["name"], "model": r["model"],
             "cap_kg": r["cap_kg"], "batt": r["batt"],
             "batt_max": r["batt"], "speed_kmh": r["speed_kmh"],
+            "base_e": r["base_e"], "kw": r["kw"],
             "x": OUTPOSTS["base"]["x"], "y": OUTPOSTS["base"]["y"],
             "status": "idle",          # idle | delivering | returning | stranded | maintenance
             "journey": None,
@@ -380,7 +381,7 @@ def estimate_mission(order, rover):
         return False, "Зона заказчика перекрыта бурей. Доставка невозможна сейчас.", None
     if order["weight_kg"] > r["cap_kg"]:
         return False, "Вес груза (%.0f кг) превышает грузоподъёмность ровера (%.0f кг)." % (order["weight_kg"], r["cap_kg"]), None
-    cfg = dict(ROVERS[rover])
+    cfg = dict(ROVERS.get(rover) or MODELS.get(rover) or {})
     cfg["speed_kmh"] = r["speed_kmh"]      # учитываем улучшенную скорость
     prof = path_profile(r["x"], r["y"], OUTPOSTS[order["outpost"]]["x"], OUTPOSTS[order["outpost"]]["y"],
                         order["weight_kg"], cfg)
@@ -658,7 +659,7 @@ def action_cmd(name, payload):
         DB["rovers.json"][mid] = {
             "id": mid, "name": m["name"], "model": m["model"],
             "cap_kg": m["cap_kg"], "batt": m["batt"], "batt_max": m["batt"],
-            "speed_kmh": m["speed_kmh"],
+            "speed_kmh": m["speed_kmh"], "base_e": m["base_e"], "kw": m["kw"],
             "x": OUTPOSTS["base"]["x"], "y": OUTPOSTS["base"]["y"],
             "status": "idle", "journey": None,
             "done": 0, "failed": 0, "earned": 0,
