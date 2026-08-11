@@ -63,6 +63,19 @@ ROVERS = {
     "comet":  {"name": "Comet",  "model": "Fast Courier",  "cap_kg": 40,  "batt": 100, "speed_kmh": 45, "base_e": 1.0, "kw": 0.005},
 }
 
+# Улучшения флота: key -> prop (поле ровера), дельта за уровень, стоимость уровней
+UPGRADES = [
+    {"key": "up_kg",    "label": "Грузоподъёмность", "prop": "cap_kg",   "delta": 12, "icon": "🧱", "costs": [40, 75, 120, 180]},
+    {"key": "up_batt",  "label": "Батарея",          "prop": "batt_max", "delta": 18, "icon": "🔋", "costs": [35, 65, 110, 170]},
+    {"key": "up_speed", "label": "Скорость",         "prop": "speed_kmh","delta": 4,  "icon": "⚡", "costs": [30, 55, 90, 140]},
+]
+
+# Покупаемые модели флота
+MODELS = {
+    "hunter": {"name": "Hunter", "model": "Scout",     "cap_kg": 55, "batt": 95, "speed_kmh": 55, "base_e": 0.9, "kw": 0.006, "cost": 220, "min_done": 2},
+    "mammoth":{"name": "Mammoth","model": "Heavy Lifter","cap_kg": 420,"batt": 220,"speed_kmh": 14, "base_e": 1.9, "kw": 0.0015, "cost": 380, "min_done": 4},
+}
+
 # ----------------------------------------------------------------------------
 # Хранилище (JSON-файлы)
 # ----------------------------------------------------------------------------
@@ -240,6 +253,7 @@ def seed_game():
             "status": "idle",          # idle | delivering | returning | stranded | maintenance
             "journey": None,
             "done": 0, "failed": 0, "earned": 0,
+            "up_kg": 0, "up_batt": 0, "up_speed": 0,
         }
     DB["rovers.json"] = rovers
     seed_orders()
@@ -364,8 +378,10 @@ def estimate_mission(order, rover):
         return False, "Зона заказчика перекрыта бурей. Доставка невозможна сейчас.", None
     if order["weight_kg"] > r["cap_kg"]:
         return False, "Вес груза (%.0f кг) превышает грузоподъёмность ровера (%.0f кг)." % (order["weight_kg"], r["cap_kg"]), None
+    cfg = dict(ROVERS[rover])
+    cfg["speed_kmh"] = r["speed_kmh"]      # учитываем улучшенную скорость
     prof = path_profile(r["x"], r["y"], OUTPOSTS[order["outpost"]]["x"], OUTPOSTS[order["outpost"]]["y"],
-                        order["weight_kg"], ROVERS[rover])
+                        order["weight_kg"], cfg)
     out_km, out_min, out_e = prof
     total_e = out_e * 2           # туда и обратно
     if total_e > r["batt"] + REQ_BATTERY_EPS:
@@ -595,6 +611,54 @@ def action_cmd(name, payload):
     if name == "fast_forward":
         STATE["ff"] = bool(payload.get("on"))
         return {"ok": True}
+    if name == "upgrade":
+        rid = payload.get("rover_id")
+        r = DB["rovers.json"].get(rid)
+        if not r or r["status"] != "idle":
+            return {"ok": False, "error": "Улучшать можно только свободный ровер на базе."}
+        plan = next((u for u in UPGRADES if u["key"] == payload.get("stat")), None)
+        if not plan:
+            return {"ok": False, "error": "Неизвестная характеристика."}
+        lvl = r.get(plan["key"], 0)
+        if lvl >= len(plan["costs"]):
+            return {"ok": False, "error": "Характеристика уже макс. уровня."}
+        cost = plan["costs"][lvl]
+        if cost > STATE["credits"]:
+            return {"ok": False, "error": "Не хватает кредитов (%d нужен, есть %d)." % (cost, STATE["credits"])}
+        STATE["credits"] -= cost
+        r[plan["key"]] = lvl + 1
+        r[plan["prop"]] = round(r[plan["prop"]] + plan["delta"])
+        log_event("mission", "%s: улучшение «%s» %s%d → +%d %s. −%d₵" %
+                  (r["name"], plan["label"], plan["icon"], lvl + 1, plan["delta"],
+                   plan["label"], cost))
+        save_all()
+        return {"ok": True}
+    if name == "buy_rover":
+        mid = payload.get("model_id")
+        m = MODELS.get(mid)
+        if not m:
+            return {"ok": False, "error": "Неизвестная модель."}
+        if mid in DB["rovers.json"]:
+            return {"ok": False, "error": "Эта модель уже в вашем флоте."}
+        total_done = sum(x["done"] for x in DB["rovers.json"].values())
+        if total_done < m["min_done"]:
+            return {"ok": False, "error": "Доступно после %d выполненных доставок (сейчас %d)." % (m["min_done"], total_done)}
+        if m["cost"] > STATE["credits"]:
+            return {"ok": False, "error": "Не хватает кредитов (%d нужен, есть %d)." % (m["cost"], STATE["credits"])}
+        STATE["credits"] -= m["cost"]
+        DB["rovers.json"][mid] = {
+            "id": mid, "name": m["name"], "model": m["model"],
+            "cap_kg": m["cap_kg"], "batt": m["batt"], "batt_max": m["batt"],
+            "speed_kmh": m["speed_kmh"],
+            "x": OUTPOSTS["base"]["x"], "y": OUTPOSTS["base"]["y"],
+            "status": "idle", "journey": None,
+            "done": 0, "failed": 0, "earned": 0,
+            "up_kg": 0, "up_batt": 0, "up_speed": 0,
+        }
+        log_event("mission", "Во флот прибыл новый ровер %s «%s» (%d кг, %d км/ч). −%d₵" %
+                  (m["name"], m["model"], m["cap_kg"], m["speed_kmh"], m["cost"]))
+        save_all()
+        return {"ok": True}
     if name == "reset":
         reset_data()
         return {"ok": True}
@@ -711,6 +775,12 @@ def public_state():
             r["trip_est_min"] = int(j["out_min"] * 2)
     orders = sorted(DB["orders.json"].values(), key=lambda o: o["expires_at"])
     storms = {k: int(v) for k, v in STATE["storms"].items() if v > STATE["minute_total"]}
+    total_done = sum(x["done"] for x in DB["rovers.json"].values())
+    fleet_shop = {
+        mid: dict(m, owned=mid in DB["rovers.json"], min_done=MODELS[mid]["min_done"],
+                  unlocked=total_done >= MODELS[mid]["min_done"])
+        for mid, m in MODELS.items()
+    }
     return {
         "ok": True,
         "time": {
@@ -732,6 +802,9 @@ def public_state():
         "storms": storms,
         "events": list(reversed(DB["events.json"][-40:])),
         "deliveries": list(reversed(DB["deliveries.json"][-15:])),
+        "upgrade_plan": UPGRADES,
+        "fleet_shop": fleet_shop,
+        "total_done": total_done,
         "config": {"rcost_per_wh": 0.5},
     }
 
