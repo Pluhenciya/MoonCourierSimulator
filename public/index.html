@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Moon Courier Simulator</title>
+<link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">🌙 Moon Courier</div>
+  <div class="stat"><span class="sl">День</span><b id="st-day">1/7</b></div>
+  <div class="stat"><span class="sl">Время</span><b id="st-clock">00:00</b></div>
+  <div class="stat credits"><span class="sl">Кредиты</span><b id="st-credits">120</b></div>
+  <div class="stat rating"><span class="sl">Рейтинг базы</span>
+    <div class="rbar"><div id="st-rating"></div></div>
+  </div>
+  <div class="spacer"></div>
+  <button id="btn-ff" class="act">⏩</button>
+  <button id="btn-help" class="act">?</button>
+  <button id="btn-reset" class="act danger">Новая игра</button>
+</header>
+
+<main id="layout">
+  <section id="orders-pane" class="pane">
+    <div class="pane-title">Заказы <span id="orders-count" class="pill"></span></div>
+    <div id="orders-list" class="scroll"></div>
+    <div class="hint">Клик — выбрать заказ.</div>
+  </section>
+
+  <section id="map-pane" class="pane">
+    <canvas id="map"></canvas>
+    <div id="legend" class="legend">
+      <div><i class="sw s-safe"></i> низкий риск</div>
+      <div><i class="sw s-mid"></i> средний</div>
+      <div><i class="sw s-high"></i> высокий</div>
+      <div><i class="sw s-sel"></i> выбран</div>
+      <div><i class="sw s-storm"></i> буря</div>
+    </div>
+  </section>
+
+  <section id="rovers-pane" class="pane">
+    <div class="pane-title">Роверы</div>
+    <div id="rovers-list" class="scroll"></div>
+    <div id="mission-box" class="mission-box">Выберите заказ и ровер.</div>
+  </section>
+</main>
+
+<aside id="log-pane">
+  <div class="pane-title">Журнал событий</div>
+  <div id="log" class="scroll"></div>
+</aside>
+
+<div id="overlay" class="hidden">
+  <div id="modal" class="modal"></div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
