@@ -103,7 +103,7 @@ function tutRender() {
     const el = findTutTarget(s.target);
     if (el) {
       el.classList.add("tut-glow");
-      if (tut.scrollStep !== tut.step) { tut.scrollStep = tut.step; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+      if (tut.scrollStep !== tut.step) { tut.scrollStep = tut.step; el.scrollIntoView({ block: "nearest" }); }
     }
   }
   window.tutMap = tutMapFor(state.data);
