@@ -196,5 +196,57 @@ class TestGameOver(unittest.TestCase):
         self.assertIn("events.json", s.DB)
 
 
+class TestPlaythrough(unittest.TestCase):
+    """Полная партия на 7 дней, сыгранная простым «жадным» ботом.
+    Проверяет, что игра проходима разумной стратегией и весь цикл
+    (заказы → запуск → путь → доставка → зарядка) работает end-to-end."""
+
+    def setUp(self):
+        setup_game()
+        s.STATE["rating"] = 100  # не мешаем боту ошибаться в начале
+
+    def _bot_step(self):
+        base = s.OUTPOSTS["base"]
+        now = s.STATE["minute_total"]
+        for r in s.DB["rovers.json"].values():
+            if r["status"] != "idle":
+                continue
+            if s.dist_km(r["x"], r["y"], base["x"], base["y"]) >= 1:
+                continue
+            if r["batt"] < r["batt_max"] * 0.5:
+                cost = int(math.ceil((r["batt_max"] - r["batt"]) / 2))
+                if s.STATE["credits"] - cost >= 20:
+                    s.action_cmd("rush_charge", {"rover_id": r["id"]})
+            best, bestv = None, -1.0
+            for o in s.DB["orders.json"].values():
+                if o["status"] != "available":
+                    continue
+                ok, _, prof = s.estimate_mission(o, r["id"])
+                if not ok:
+                    continue
+                remain = o["expires_at"] - now
+                mission_min = prof["out_min"] * 2
+                if remain < mission_min:      # заведомо не успеем — не тратим миссию
+                    continue
+                urgency = 2.0 if remain < 90 else 1.0   # срочные — в приоритет
+                v = (o["reward"] * urgency) / max(1.0, mission_min)
+                if v > bestv:
+                    bestv, best = v, o
+            if best:
+                s.launch(r["id"], best["id"])
+
+    def test_game_is_winnable_with_greedy_strategy(self):
+        for _ in range(0, s.DAYS_TO_SURVIVE * 1440, 30):
+            s.simulate_step(30)
+            self._bot_step()
+            if s.STATE["gameover"]:
+                break
+        self.assertTrue(s.STATE["gameover"], "партия не завершилась за 7 дней")
+        self.assertEqual(s.STATE["gameover_reason"], "success",
+                         "жадная стратегия должна пережить 7 дней (баланс адекватен)")
+        self.assertGreaterEqual(s.STATE["credits"], s.START_CREDITS,
+                                "доход за партию должен покрывать расходы бота")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

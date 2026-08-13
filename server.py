@@ -503,7 +503,12 @@ def path_profile(x0, y0, x1, y1, weight_kg, rover):
 
 
 def seed_orders(sample=None):
-    """Первичная генерация заказов (включая гарантированные «невозможные»)."""
+    """Первичная генерация заказов.
+
+    Ровно один гарантированно «невозможный» (260 кг > любого ровера) — это
+    обязательный по ТЗ сценарий «доставка невозможна». Остальные подобраны
+    так, чтобы стартовый флот (Bumble 80 кг / Comet 40 кг / Atlas 250 кг)
+    реально мог их доставить: вес ≤ грузоподъёмности и окно ≥ времени пути."""
     orders = DB["orders.json"]
     now = STATE["minute_total"]
 
@@ -525,14 +530,15 @@ def seed_orders(sample=None):
             "zone_risk": ZONES[zid]["risk"],
         }
 
-    # гарантированно «невозможные» сценарии на старте
-    add("far_side", 260, 200, 1.4)          # тяжелее любой грузоподъёмности — невыполним
-    add("far_side", 70, 60, 2.2)            # срочный и далёкий — на Bumble не хватит батареи
-    add("bugtown", 45, 45, 2.0)             # срочный «лёгкий» для Comet
-    add("crater_edge", 120, 120, 1.3)
-    add("serenity", 90, 160, 1.5)
-    add("sanctum_yd", 30, 70, 1.4)
-    add("apollo_camp", 150, 180, 1.2)
+    # демонстрация «невозможной доставки»: тяжелее любой грузоподъёмности
+    add("far_side", 260, 240, 1.4)
+    # выполнимые стартовые заказы (окно с запасом на реальное время пути)
+    add("bugtown", 45, 100, 2.0)        # Bumble: туда-обратно ~54 мин
+    add("crater_edge", 70, 120, 1.3)    # Bumble: ~109 мин
+    add("serenity", 35, 160, 1.5)       # только Comet: ~133 мин
+    add("sanctum_yd", 30, 80, 1.4)      # Comet: ~67 мин
+    add("apollo_camp", 60, 130, 1.2)    # Bumble: ~112 мин
+    add("bugtown", 20, 90, 2.0)         # быстрый «разогрев» для любого ровера
 
     log_event("orders", "Радио приняло первичный пакет заказов (%d штук)." % len(orders))
 
@@ -623,7 +629,10 @@ def resolve_storms():
 
 
 def spawn_orders_loop():
-    """Периодическое появление новых заказов."""
+    """Периодическое появление новых заказов.
+    Срок всегда с запасом на доставку: если окно меньше, чем реально нужно
+    самому быстрому роверу на этот пункт, заказ был бы гарантированно
+    невыполним — такие не генерируются (кроме намеренно «невозможных» в seed_orders)."""
     now = STATE["minute_total"]
     if "next_spawn" not in STATE or now >= STATE["next_spawn"]:
         STATE["next_spawn"] = now + RAND.randint(70, 120)
@@ -637,6 +646,13 @@ def spawn_orders_loop():
                 is_urgent = RAND.random() < 0.4
                 weight = RAND.randint(6, 230)
                 urg = RAND.randint(40, 90) if is_urgent else RAND.randint(150, 400)
+                # минимально необходимое время на доставку самому быстрому роверу
+                fastest = max(DB["rovers.json"].values(), key=lambda r: r["speed_kmh"])
+                cfg = {"speed_kmh": fastest["speed_kmh"], "base_e": 1.2, "kw": 0.004}
+                _, rt_min, _, _ = path_profile(OUTPOSTS["base"]["x"], OUTPOSTS["base"]["y"],
+                                               out["x"], out["y"], 0, cfg)
+                min_window = int(rt_min * 2 * 1.5) + 25   # туда-обратно + запас на события
+                urg = max(urg, min_window)
                 oid = gen_id("order")
                 DB["orders.json"][oid] = {
                     "id": oid, "outpost": dest, "outpost_name": out["name"],
@@ -681,8 +697,8 @@ def check_orders_expiry():
     for o in list(DB["orders.json"].values()):
         if o["status"] == "available" and o["expires_at"] <= now:
             o["status"] = "expired"
-            STATE["rating"] = max(0, STATE["rating"] - 4)
-            log_event("orders", "Заказ %s (%.0f кг → %s) сгорел. Награда упущена, рейтинг -4." %
+            STATE["rating"] = max(0, STATE["rating"] - 2)
+            log_event("orders", "Заказ %s (%.0f кг → %s) сгорел. Награда упущена, рейтинг -2." %
                       (o["id"], o["weight_kg"], o["outpost_name"]))
 
 
