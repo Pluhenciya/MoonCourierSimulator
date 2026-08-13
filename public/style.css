@@ -197,7 +197,7 @@ button.icon.sm{width:26px;height:26px;font-size:13px;border-radius:8px}
 #tut.t-below::after{top:-20px;left:50%;margin-left:-10px;border-bottom:12px solid #f3f5f8;border-top:0}
 #tut.t-left::after{right:-20px;top:50%;margin-top:-10px;border-left:12px solid #f3f5f8;border-right:0}
 #tut.t-right::after{left:-20px;top:50%;margin-top:-10px;border-right:12px solid #f3f5f8;border-left:0}
-.tut-num{font-size:10px;letter-spacing:1.6px;color:#6b7a8c;text-transform:uppercase;border-bottom:1px solid #d3dae4;
+.tut-num{font-size:11px;letter-spacing:.6px;color:#6b7a8c;border-bottom:1px solid #d3dae4;
   padding-bottom:7px;margin-bottom:9px;font-weight:600}
 .tut-dots{display:flex;gap:6px;margin-bottom:9px}
 .tut-dots .dot{width:7px;height:7px;border-radius:2px;background:#ccd4df}
