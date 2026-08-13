@@ -149,7 +149,7 @@ UPGRADES = [
 
 # Витрина верфи: модели генерируются случайно и растут с прогрессом игрока
 SHOP_SIZE = 4
-SHOP_REFRESH_MIN = (35, 70)      # игровые минуты между ротациями слота
+SHOP_REFRESH_MIN = (10, 20)     # игровые минуты между ротациями слота витрины
 MODEL_NAMES = ["Hunter", "Mammoth", "Viper", "Titan", "Swift", "Boulder", "Nomad", "Ranger",
                "Comet", "Drake", "Pegasus", "Raven", "Storm", "Echo", "Onyx"]
 MODEL_TYPES = ["Scout", "Heavy Lifter", "Fast Courier", "Freighter", "Lunar Truck",
@@ -192,16 +192,17 @@ def shop_init():
 
 
 def shop_tick(dt_min):
-    """Периодически заменяет один слот витрины свежей моделью."""
+    """Периодически заменяет слоты витрины свежими моделями."""
     if STATE["minute_total"] < STATE.get("shop_next", 1 << 30):
         return
     total = sum(x["done"] for x in DB["rovers.json"].values())
-    i = RAND.randrange(len(STATE["shop"]))
-    old = STATE["shop"][i]
-    STATE["shop"][i] = roll_model(total)
-    log_event("mission", "Верфь обновила витрину: «%s %s» (%.0f кг, %d км/ч) — %d$. Осталась: «%s»."
-              % (STATE["shop"][i]["name"], STATE["shop"][i]["model"], STATE["shop"][i]["cap_kg"],
-                 STATE["shop"][i]["speed_kmh"], STATE["shop"][i]["cost"], old["name"]))
+    for _ in range(2):  # обновляем два слота за раз
+        i = RAND.randrange(len(STATE["shop"]))
+        old = STATE["shop"][i]
+        STATE["shop"][i] = roll_model(total)
+        log_event("mission", "Верфь обновила витрину: «%s %s» (%.0f кг, %d км/ч) — %d$. Осталась: «%s»."
+                  % (STATE["shop"][i]["name"], STATE["shop"][i]["model"], STATE["shop"][i]["cap_kg"],
+                     STATE["shop"][i]["speed_kmh"], STATE["shop"][i]["cost"], old["name"]))
     STATE["shop_next"] = STATE["minute_total"] + RAND.randint(*SHOP_REFRESH_MIN)
 
 # ----------------------------------------------------------------------------
