@@ -33,7 +33,10 @@ async function poll() {
   try {
     if (state.data) {
       const t = performance.now();
-      state.data.rovers.forEach((r) => { state.roverPrev[r.id] = { x: r.x, y: r.y, t }; });
+      state.data.rovers.forEach((r) => {
+        const j = r.journey;
+        state.roverPrev[r.id] = { x: r.x, y: r.y, t, prog: j ? r.progress : 0, phase: j ? j.phase : null };
+      });
     }
     state.data = await (await fetch("/api/state", { cache: "no-store" })).json();
     render();
@@ -361,16 +364,46 @@ function renderMap(d) {
     }
   });
 
-  // роверы (плавная интерполяция между поллингами)
+  // точка на ломаной пути по доле длины (как на сервере)
+function pointAlongPath(path, frac) {
+  if (!path || !path.length) return null;
+  let L = 0;
+  const seg = [];
+  for (let i = 1; i < path.length; i++) {
+    const l = Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
+    seg.push(l); L += l;
+  }
+  if (L <= 0) return { x: path[0][0], y: path[0][1] };
+  let target = Math.max(0, Math.min(1, frac)) * L;
+  for (let i = 0; i < seg.length; i++) {
+    if (target <= seg[i] || i === seg.length - 1) {
+      const f = seg[i] === 0 ? 0 : target / seg[i];
+      return { x: path[i][0] + (path[i + 1][0] - path[i][0]) * f, y: path[i][1] + (path[i + 1][1] - path[i][1]) * f };
+    }
+    target -= seg[i];
+  }
+  return { x: path[path.length - 1][0], y: path[path.length - 1][1] };
+}
+
+  // роверы (плавная интерполяция вдоль маршрута между поллингами)
   const selR = d.rovers.find((x) => x.id === state.selRover);
   const nowMs = performance.now();
   d.rovers.forEach((r) => {
     const pv = state.roverPrev[r.id];
-    const dx = r.x - (pv ? pv.x : r.x), dy = r.y - (pv ? pv.y : r.y);
-    const teleport = !pv || Math.hypot(dx, dy) > 250;
-    const a = teleport || !pv ? 1 : Math.min(1, (nowMs - pv.t) / 800);
-    const rx = px(pv && !teleport ? pv.x + dx * a : r.x);
-    const ry = py(pv && !teleport ? pv.y + dy * a : r.y);
+    const j = r.journey;
+    const phaseChanged = pv && pv.phase !== null && j && pv.phase !== j.phase;
+    const stopped = pv && pv.phase === null && !j;
+    const teleport = !pv || Math.hypot(r.x - pv.x, r.y - pv.y) > 250 || phaseChanged;
+    let rx, ry;
+    if (j && r.path && r.path.length > 1 && pv && !teleport && !stopped) {
+      const a = Math.min(1, (nowMs - pv.t) / 800);
+      const prog = pv.prog + (r.progress - pv.prog) * a;
+      const frac = j.phase === "returning" ? 1 - prog : prog;
+      const pt = pointAlongPath(r.path, frac);
+      rx = px(pt.x); ry = py(pt.y);
+    } else {
+      rx = px(r.x); ry = py(r.y);
+    }
     if (r.journey) {
       const oo = d.outposts[r.journey.outpost];
       ctx.strokeStyle = "rgba(56,189,248,.18)"; ctx.lineWidth = 1.5;
@@ -555,7 +588,7 @@ let lastRaf = 0;
 function rafLoop(ts) {
   requestAnimationFrame(rafLoop);
   if (!state.data || document.hidden) return;
-  if (ts - lastRaf < 40) return; // ~25 fps достаточно
+  if (ts - lastRaf < 30) return; // ~33 fps, плавное движение роверов
   lastRaf = ts;
   renderMap(state.data);
 }
