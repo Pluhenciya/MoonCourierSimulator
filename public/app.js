@@ -538,7 +538,8 @@ $("btn-reset").addEventListener("click", async () => {
   if (confirm("Начать заново?")) { await api("reset"); poll(); }
 });
 
-initMenu();
+initMenu(); // ?noMenu=1 — пропустить главное меню (для скриншотов/тестов)
+if (location.search.includes("noMenu")) menuHide();
 poll();
 setInterval(poll, 800);
 
