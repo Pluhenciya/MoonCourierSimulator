@@ -205,7 +205,7 @@ $("tut-next").addEventListener("click", () => {
   tut.step++; tut.pending = false; tutRender();
 });
 $("tut-skip").addEventListener("click", closeTutorial);
-$("btn-help").addEventListener("click", startTutorial);
+$("btn-help").addEventListener("click", () => { SFX.click(); startTutorial(); });
 // обучение — только при первом входе (флаг ставится при завершении/пропуске)
 if (!localStorage.getItem("mcs_tut")) {
   setTimeout(startTutorial, 600);
@@ -255,6 +255,7 @@ function showFleet() {
         document.querySelector("#modal .f-h")?.insertAdjacentHTML("afterend", `<div class="err">${res.error}</div>`);
         return;
       }
+      SFX.buy();
       await poll();
       showFleet();
     });
@@ -268,7 +269,7 @@ function showShop() {
       <div class="sc"><b class="good">${d.credits}</b><span>$ в наличии</span></div>
       <div class="sc"><b>${d.total_done}</b><span>доставок</span></div>
     </div>
-    <div class="f-h">Новые модели <span class="fr">витрина обновляется каждые 35–70 мин</span></div>`;
+    <div class="f-h">Новые модели <span class="fr">витрина обновляется каждые 10–20 мин</span></div>`;
   for (const m of d.fleet_shop) {
     html += `
       <div class="f-shop">
@@ -290,6 +291,7 @@ function showShop() {
         document.querySelector("#modal .f-h")?.insertAdjacentHTML("afterend", `<div class="err">${res.error}</div>`);
         return;
       }
+      SFX.buy();
       await poll();
       showShop();
     });

@@ -55,6 +55,17 @@ function render() {
   if (d.time.paused) $("st-clock").textContent = "⏸ " + d.time.clock;
   renderOrders(d); renderRovers(d); renderMission(d); renderLog(d); renderMap(d);
   tutTick(d);
+  // звук по новым событиям журнала
+  const evt = d.events && d.events[0];
+  if (evt && evt.ts !== state.lastEvtTs) {
+    const first = state.lastEvtTs === undefined;
+    state.lastEvtTs = evt.ts;
+    if (!first) SFX.byEvent(evt);
+  }
+  // иконка mute
+  $("btn-sound").innerHTML = SFX.muted
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
   if (d.gameover) showGameOver(d);
 }
 
@@ -85,7 +96,7 @@ function renderOrders(d) {
       <div class="mid"><span class="w">${kg(o.weight_kg)}</span><span class="r">+${o.reward}$</span></div>
       <div class="risk"><i style="--dot:${riskColor(o.zone_risk)}"></i>риск ${Math.round(o.zone_risk * 100)}%</div>
       <div class="obar"><div style="width:${Math.max(0, Math.min(100, (left / o.urgent) * 100))}%"></div></div>`;
-    el.addEventListener("click", () => { state.selOrder = o.id; state.hoverOrder = null; renderOrders(d); renderMission(d); });
+    el.addEventListener("click", () => { state.selOrder = o.id; state.hoverOrder = null; SFX.click(); renderOrders(d); renderMission(d); });
     el.addEventListener("mouseenter", () => { state.hoverOrder = o.id; renderMap(d); });
     el.addEventListener("mouseleave", () => { state.hoverOrder = null; renderMap(d); });
     list.appendChild(el);
@@ -116,7 +127,7 @@ function renderRovers(d) {
       <div class="spec"><span>🔋 <b>${Math.round(r.batt)}</b>/${r.batt_max}</span>
         <span>🧱 <b>${r.cap_kg}</b> кг</span><span>⚡ <b>${r.speed_kmh}</b> км/ч</span></div>
       ${info}`;
-    if (clickable) el.addEventListener("click", () => { state.selRover = r.id; renderRovers(d); renderMission(d); });
+    if (clickable) el.addEventListener("click", () => { state.selRover = r.id; SFX.click(); renderRovers(d); renderMission(d); });
     list.appendChild(el);
   }
 }
@@ -175,7 +186,12 @@ function wireActions(d, r, o, block) {
         box.innerHTML = box.innerHTML + `<div class="err">${res.error}</div>`;
         box.dataset.err = "1";
       }
-      if (res && res.ok) { state.selOrder = null; state.selRover = null; }
+      if (res && res.ok) {
+        if (btn.dataset.a === "launch") SFX.launch();
+        else if (btn.dataset.a === "charge") SFX.buy();
+        else SFX.click();
+        state.selOrder = null; state.selRover = null;
+      }
       poll();
     });
   });
@@ -552,27 +568,119 @@ function showLeaders() {
   showModal(`<h2>🏆 Таблица лидеров</h2>${leaderTableHtml()}<button onclick="hideModal()">Закрыть</button>`);
 }
 
-/* -------- кнопки -------- */
+/* -------- звук и музыка (Web Audio, синтез без файлов) -------- */
+const SFX = {
+  ctx: null, master: null,
+  muted: localStorage.getItem("mcs_muted") === "1",
+  ensure() {
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.5;
+      this.master.connect(this.ctx.destination);
+    }
+    if (this.ctx.state === "suspended") this.ctx.resume();
+  },
+  tone(freq, dur, type, vol, when = 0, slide = 0) {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime + when;
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(Math.max(20, freq), t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq + slide), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.05);
+  },
+  noise(dur, vol, cutoff = 600) {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const n = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const f = this.ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = cutoff;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(this.master); src.start(t);
+  },
+  click() { this.tone(760, 0.05, "square", 0.1); },
+  orders() { this.tone(520, 0.06, "sine", 0.14); this.tone(690, 0.07, "sine", 0.14, 0.08); },
+  launch() { this.tone(170, 0.55, "sawtooth", 0.16, 0, 240); this.tone(340, 0.3, "square", 0.08, 0.1, 160); this.noise(0.35, 0.05, 900); },
+  arrive() { this.tone(523, 0.13, "sine", 0.25); this.tone(659, 0.13, "sine", 0.25, 0.11); this.tone(784, 0.24, "sine", 0.25, 0.22); },
+  late() { this.tone(330, 0.22, "triangle", 0.2); this.tone(233, 0.3, "triangle", 0.2, 0.2); },
+  hazard() { this.noise(0.4, 0.22, 800); this.tone(120, 0.35, "sawtooth", 0.14, 0, -40); },
+  storm() { this.noise(0.7, 0.2, 500); this.tone(70, 0.8, "sine", 0.2, 0, -20); },
+  buy() { this.tone(880, 0.09, "sine", 0.2); this.tone(1318, 0.22, "sine", 0.2, 0.08); },
+  day() { this.tone(440, 0.12, "sine", 0.18); this.tone(660, 0.18, "sine", 0.18, 0.13); },
+  win() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.28, "triangle", 0.22, i * 0.16)); },
+  lose() { [392, 330, 262, 196].forEach((f, i) => this.tone(f, 0.32, "triangle", 0.2, i * 0.22)); },
+  toggleMute() {
+    this.muted = !this.muted;
+    localStorage.setItem("mcs_muted", this.muted ? "1" : "0");
+    if (this.muted) MUSIC.stop(); else MUSIC.start();
+    return this.muted;
+  },
+  // звук по событию из журнала
+  byEvent(e) {
+    if (e.kind === "delivery") (e.text.includes("опозд") ? SFX.late() : SFX.arrive());
+    else if (e.kind === "storm") SFX.storm();
+    else if (e.kind === "hazard") SFX.hazard();
+    else if (e.kind === "orders") SFX.orders();
+    else if (e.kind === "day") SFX.day();
+    else if (e.kind === "game") (e.text.includes("устояла") ? SFX.win() : SFX.lose());
+  },
+};
+// фоновая музыка — медленный лунный цикл (бас + пентатоника)
+const MUSIC = {
+  bass: [110, 110, 130.8, 98, 110, 110, 87.3, 98],
+  arp: [220, 261.6, 293.7, 329.6, 293.7, 261.6, 220, 196, 220, 261.6, 293.7, 329.6, 440, 329.6, 293.7, 261.6],
+  step: 0, timer: null,
+  start() {
+    if (this.timer || SFX.muted) return;
+    this.step = 0;
+    this.timer = setInterval(() => {
+      if (SFX.muted || !SFX.ctx) return;
+      const i = this.step;
+      SFX.tone(this.bass[i % 8], 1.1, "sine", 0.09, 0.05);
+      SFX.tone(this.arp[i % 16], 0.42, "triangle", 0.045, 0.11);
+      this.step++;
+    }, 450);
+  },
+  stop() { if (this.timer) { clearInterval(this.timer); this.timer = null; } },
+};
+window.addEventListener("pointerdown", () => { SFX.ensure(); MUSIC.start(); }, { once: true });
 // три кнопки времени: обычная скорость / пауза / ускорение ×5
 $("btn-play").addEventListener("click", async () => {
+  SFX.click();
   await api("fast_forward", { on: false });
   await api("pause", { on: false });
   poll();
 });
 $("btn-ff").addEventListener("click", async () => {
+  SFX.click();
   await api("pause", { on: false });
   await api("fast_forward", { on: true });
   poll();
 });
 $("btn-pause").addEventListener("click", async () => {
+  SFX.click();
   await api("pause", { on: true });
   poll();
 });
+$("btn-sound").addEventListener("click", () => { if (SFX.ctx && !SFX.muted) SFX.click(); SFX.toggleMute(); render(); });
 $("btn-reset").addEventListener("click", async () => {
+  SFX.click();
   if (confirm("Начать заново?")) { await api("reset"); poll(); }
 });
 
-$("btn-leaders").addEventListener("click", showLeaders);
+$("btn-leaders").addEventListener("click", () => { SFX.click(); showLeaders(); });
 poll();
 setInterval(poll, 800);
 
