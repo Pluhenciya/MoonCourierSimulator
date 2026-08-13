@@ -93,7 +93,7 @@ def gen_world(rand):
                       (v2[4][0], 320), (v2[3][0], 230), (v2[2][0], 160), (v2[1][0], 80)],
         "apollo": [(v2[5][0], 440), (h3[1][0], 470), (h3[2][0], 420), (h3[3][0], 460),
                    (1000, h3[4][1]), (1000, 700), (560, 700),
-                   (v2[9][0], 640), (v2[8][0], 560), (v2[7][0], 480)],
+                   (v2[8][0], 640), (v2[7][0], 560), (v2[6][0], 480)],
     }
     zones = {k: dict(ZONE_META[k], poly=[(round(x, 1), round(y, 1)) for (x, y) in poly])
              for k, poly in zones.items()}
@@ -660,9 +660,11 @@ def simulate_step(dt_min):
     if STATE["rating"] <= 0 and not STATE["gameover"]:
         STATE["gameover"] = True
         STATE["gameover_reason"] = "Рейтинг базы упал до нуля. Базу закрыла EarthGov."
+        log_event("game", "База закрыта EarthGov: рейтинг пал до нуля. Партия окончена.")
     if STATE["day"] > DAYS_TO_SURVIVE and not STATE["gameover"]:
         STATE["gameover"] = True
         STATE["gameover_reason"] = "success"
+        log_event("game", "Прогон завершён — база устояла 7 дней. Условия контракта выполнены.")
 
 
 def recharge_rovers(dt_min):

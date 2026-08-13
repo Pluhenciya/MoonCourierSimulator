@@ -143,6 +143,14 @@ function renderMission(d) {
     box.innerHTML = `<div class="mt">Миссия</div><div class="hintMsg">Выберите заказ слева и ровер справа — здесь появится расчёт маршрута.</div>`;
     return;
   }
+  if (o.status !== "available") {
+    const why = o.status === "delivered" ? "уже доставлен"
+      : o.status === "in_transit" ? "уже в пути"
+      : o.status === "expired" ? "срок истёк — контракт сгорел"
+      : `статус «${o.status}»`;
+    box.innerHTML = `<div class="mt">Миссия</div><div class="err">Заказ ${o.id} недоступен: ${why}. Выберите другой заказ.</div>`;
+    return;
+  }
   const out = d.outposts[o.outpost];
   const km = Math.hypot(out.x - r.x, out.y - r.y) * 0.05;
   const stormy = d.storms[o.zone_id];
