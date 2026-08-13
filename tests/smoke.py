@@ -123,6 +123,24 @@ class TestDeliveryCycle(unittest.TestCase):
     def setUp(self):
         setup_game()
 
+    def test_maintenance_rover_recharges_and_returns_to_idle(self):
+        """Ровер, вернувшийся с батареей <5 (maintenance), не должен быть заблокирован:
+        пассивно заряжается и после ~30 Вт·ч снова готов к работе, а быстрая зарядка доступна."""
+        setup_game()
+        r = s.DB["rovers.json"]["comet"]
+        r["status"] = "maintenance"
+        r["batt"] = 4
+        r["x"], r["y"] = s.OUTPOSTS["base"]["x"], s.OUTPOSTS["base"]["y"]
+        s.recharge_rovers(5)                       # 5 игровых минут пассивно
+        self.assertGreater(r["batt"], 4, "техобслуживаемый ровер должен заряжаться")
+        res = s.action_cmd("rush_charge", {"rover_id": r["id"]})
+        self.assertTrue(res["ok"], "быстрая зарядка должна работать на maintenance: %s" % res)
+        self.assertAlmostEqual(r["batt"], r["batt_max"], delta=1e-6)
+        r["batt"] = 4                              # снова разряжен
+        s.recharge_rovers(100)                     # дольше — до перехода в idle
+        self.assertEqual(r["status"], "idle", "после техобслуживания ровер снова готов")
+        self.assertGreaterEqual(r["batt"], 30)
+
     def test_full_delivery_updates_everything(self):
         order = make_order("bugtown", 20, expires=999999)
         s.DB["orders.json"][order["id"]] = order

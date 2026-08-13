@@ -685,11 +685,16 @@ def simulate_step(dt_min):
 
 def recharge_rovers(dt_min):
     for r in DB["rovers.json"].values():
-        if r["status"] == "idle" and dist_km(r["x"], r["y"], OUTPOSTS["base"]["x"], OUTPOSTS["base"]["y"]) < 1:
+        if r["status"] not in ("idle", "maintenance"):
+            continue
+        if dist_km(r["x"], r["y"], OUTPOSTS["base"]["x"], OUTPOSTS["base"]["y"]) < 1:
             hour_min = int(STATE["minute_total"]) % 1440
             night = hour_min < 360 or hour_min >= 1200
             rate = 3.0 if night else 7.0
             r["batt"] = min(r["batt_max"], r["batt"] + rate * dt_min)
+            if r["status"] == "maintenance" and r["batt"] >= 30:
+                r["status"] = "idle"
+                log_event("mission", "%s завершил техобслуживание и снова готов к работе." % r["name"])
 
 
 def check_orders_expiry():
@@ -705,7 +710,7 @@ def check_orders_expiry():
 def estimate_mission(order, rover):
     """Проверяет и считает миссию. Возвращает (ok, reason, profile)."""
     r = DB["rovers.json"][rover]
-    if r["status"] != "idle":
+    if r["status"] not in ("idle", "maintenance"):
         return False, "Ровер занят (%s)." % r["status"], None
     if dist_km(r["x"], r["y"], OUTPOSTS["base"]["x"], OUTPOSTS["base"]["y"]) > 1:
         return False, "Ровер должен находиться на базе для загрузки.", None
@@ -922,7 +927,7 @@ def action_cmd(name, payload):
     if name == "rush_charge":
         rid = payload.get("rover_id")
         r = DB["rovers.json"].get(rid)
-        if not r or r["status"] != "idle":
+        if not r or r["status"] not in ("idle", "maintenance"):
             return {"ok": False, "error": "Ровер должен быть свободен."}
         to_fill = r["batt_max"] - r["batt"]
         cost = int(math.ceil(to_fill / 2))

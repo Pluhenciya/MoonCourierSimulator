@@ -178,10 +178,12 @@ function actionsHtml(d, r, o, block) {
     const cost = Math.round(15 + Math.hypot(d.outposts[o.outpost].x - r.x, d.outposts[o.outpost].y - r.y) * 0.05 * 0.6);
     return `<button class="recover" data-a="recover">Эвакуировать ${r.name} · −${cost}$</button>`;
   }
-  if (block) return `<div class="err">✕ Доставка невозможна: ${block}</div>`;
   const cost = Math.ceil((r.batt_max - r.batt) / 2);
-  return `<button class="launch" data-a="launch">🚀 Запустить доставку</button>
-    <button class="charge" data-a="charge">⚡ Быстрая зарядка · −${cost}$</button>`;
+  const chargeBtn = cost > 0 ? `<button class="charge" data-a="charge">⚡ Быстрая зарядка · −${cost}$</button>` : "";
+  if (block) {
+    return `<div class="err">✕ Доставка невозможна: ${block}</div>${chargeBtn}`;
+  }
+  return `<button class="launch" data-a="launch">🚀 Запустить доставку</button>${chargeBtn}`;
 }
 function wireActions(d, r, o, block) {
   const box = $("ma");
