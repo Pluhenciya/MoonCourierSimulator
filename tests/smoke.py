@@ -159,5 +159,42 @@ class TestDeliveryCycle(unittest.TestCase):
         self.assertLess(s.STATE["rating"], rating_before, "просрочка должна ударить по рейтингу")
 
 
+class TestGameOver(unittest.TestCase):
+    """Переходы финала: рейтинг 0 → поражение, выживание 7 дней → победа, + журнал 'game'."""
+
+    def setUp(self):
+        setup_game()
+
+    def _last_game_event(self):
+        return [e for e in s.DB["events.json"] if e["kind"] == "game"]
+
+    def test_rating_zero_triggers_loss(self):
+        s.STATE["rating"] = 0
+        s.simulate_step(1)
+        self.assertTrue(s.STATE["gameover"])
+        self.assertNotEqual(s.STATE["gameover_reason"], "success")
+        self.assertTrue(self._last_game_event(), "нет события game в журнале")
+        self.assertIn("База закрыта", self._last_game_event()[-1]["text"])
+
+    def test_survive_seven_days_triggers_win(self):
+        s.STATE["minute_total"] = s.DAYS_TO_SURVIVE * 1440 - 1  # на пороге 8-го дня
+        s.simulate_step(2)
+        self.assertTrue(s.STATE["gameover"])
+        self.assertEqual(s.STATE["gameover_reason"], "success")
+        self.assertTrue(self._last_game_event(), "нет события game в журнале")
+        self.assertIn("устояла", self._last_game_event()[-1]["text"])
+
+    def test_sim_loop_runs_stably(self):
+        s.STATE["rating"] = 100  # не дадим умереть раньше времени
+        for _ in range(400):
+            s.simulate_step(2)
+            if s.STATE["gameover"]:
+                break
+        self.assertIsInstance(s.STATE["credits"], (int, float))
+        self.assertEqual(len(s.DB["rovers.json"]), 3)
+        self.assertIn("orders.json", s.DB)
+        self.assertIn("events.json", s.DB)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
