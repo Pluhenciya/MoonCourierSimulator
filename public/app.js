@@ -46,9 +46,9 @@ function render() {
   $("st-clock").textContent = d.time.clock;
   $("st-credits").textContent = d.credits + " $";
   $("st-rating").style.width = d.rating + "%";
-  $("btn-play").innerHTML = d.time.paused ? IC.play : d.time.ff ? IC.ff + IC.ff : IC.pause;
-  $("btn-play").classList.toggle("on", d.time.paused);
-  $("btn-play").title = d.time.paused ? "Продолжить" : d.time.ff ? "Пауза" : "Ускорение (×5)";
+  $("btn-pause").classList.toggle("on", d.time.paused);
+  $("btn-ff").classList.toggle("on", d.time.ff);
+  $("btn-play").classList.toggle("on", !d.time.paused && !d.time.ff);
   if (d.time.paused) $("st-clock").textContent = "⏸ " + d.time.clock;
   renderOrders(d); renderRovers(d); renderMission(d); renderLog(d); renderMap(d);
   tutTick(d);
@@ -526,12 +526,19 @@ function initMenu() {
 }
 
 /* -------- кнопки -------- */
-// одна кнопка: игра → ×5 → пауза → игра (в прежнем режиме)
+// три кнопки времени: обычная скорость / пауза / ускорение ×5
 $("btn-play").addEventListener("click", async () => {
-  const t = state.data.time;
-  if (t.paused) await api("pause", { on: false });
-  else if (t.ff) await api("pause", { on: true });
-  else await api("fast_forward", { on: true });
+  await api("fast_forward", { on: false });
+  await api("pause", { on: false });
+  poll();
+});
+$("btn-ff").addEventListener("click", async () => {
+  await api("pause", { on: false });
+  await api("fast_forward", { on: true });
+  poll();
+});
+$("btn-pause").addEventListener("click", async () => {
+  await api("pause", { on: true });
   poll();
 });
 $("btn-reset").addEventListener("click", async () => {

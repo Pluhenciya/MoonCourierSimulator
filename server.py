@@ -934,20 +934,19 @@ def action_cmd(name, payload):
         return {"ok": True}
     if name == "fast_forward":
         STATE["ff"] = bool(payload.get("on"))
+        if STATE["ff"]:
+            STATE["paused"] = False
         return {"ok": True}
     if name == "pause":
         on = payload.get("on")
         if on is not None:
+            STATE["paused"] = bool(on)
             if on:
-                # запоминаем режим до паузы, чтобы кнопка вернулась в него
-                STATE.setdefault("was_ff", STATE.get("ff", False))
                 STATE["ff"] = False
-                STATE["paused"] = True
-            else:
-                STATE["paused"] = False
-                STATE["ff"] = bool(STATE.get("was_ff", False))
         else:
             STATE["paused"] = not STATE.get("paused", False)
+            if STATE["paused"]:
+                STATE["ff"] = False
         return {"ok": True, "paused": STATE["paused"]}
     if name == "upgrade":
         rid = payload.get("rover_id")
