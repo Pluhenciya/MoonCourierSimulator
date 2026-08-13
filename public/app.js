@@ -2,7 +2,7 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const state = { selOrder: null, selRover: null, data: null, roverPrev: {}, hoverOrder: null };
+const state = { selOrder: null, selRover: null, data: null, roverPrev: {}, hoverOrder: null, lastPollT: null, pollDt: 800 };
 window.tutMap = null; // цель подсветки обучалки на карте: {kind:"base"|"order"|"rover", id?}
 
 const STATUS = {
@@ -33,6 +33,8 @@ async function poll() {
   try {
     if (state.data) {
       const t = performance.now();
+      state.pollDt = state.lastPollT ? Math.min(2500, t - state.lastPollT) : 800;
+      state.lastPollT = t;
       state.data.rovers.forEach((r) => {
         const j = r.journey;
         state.roverPrev[r.id] = { x: r.x, y: r.y, t, prog: j ? r.progress : 0, phase: j ? j.phase : null };
@@ -409,10 +411,11 @@ function pointAlongPath(path, frac) {
     const j = r.journey;
     const phaseChanged = pv && pv.phase !== null && j && pv.phase !== j.phase;
     const stopped = pv && pv.phase === null && !j;
-    const teleport = !pv || Math.hypot(r.x - pv.x, r.y - pv.y) > 250 || phaseChanged;
+    const progBack = pv && j && r.progress < pv.prog - 0.03;
+    const teleport = !pv || Math.hypot(r.x - pv.x, r.y - pv.y) > 250 || phaseChanged || progBack;
     let rx, ry;
     if (j && r.path && r.path.length > 1 && pv && !teleport && !stopped) {
-      const a = Math.min(1, (nowMs - pv.t) / 800);
+      const a = Math.min(1, Math.max(0, (nowMs - pv.t) / state.pollDt));
       const prog = pv.prog + (r.progress - pv.prog) * a;
       const frac = j.phase === "returning" ? 1 - prog : prog;
       const pt = pointAlongPath(r.path, frac);
