@@ -493,8 +493,8 @@ function showHelp() { showModal(RULES + `<button onclick="hideModal()">Поня�
 
 function showGameOver(d) {
   if (!$("overlay").classList.contains("hidden")) return;
-  leaderSave(d);
   const ok = d.gameover_reason === "success";
+  const name = localStorage.getItem("mcs_name") || "";
   $("modal").innerHTML = `
     <h2>${ok ? "🏆 База выстояла 7 дней!" : "💀 База закрыта"}</h2>
     <div class="end-msg">${ok ? "Превосходная работа, диспетчер." : d.gameover_reason}</div>
@@ -504,22 +504,34 @@ function showGameOver(d) {
       <div class="sc"><b>${d.deliveries.length}</b><span>доставок</span></div>
       <div class="sc"><b>${d.credits + d.rating * 30}</b><span>итог</span></div>
     </div>
-    <button onclick="hideModal();api('reset').then(poll)">Новая игра</button>`;
+    <label class="menu-lab">Твоё имя для таблицы лидеров
+      <input id="go-name" maxlength="16" placeholder="Диспетчер" value="${name}"/>
+    </label>
+    <div class="menu-row">
+      <button class="menu-btn sm" id="go-save" onclick="saveScore()">💾 В таблицу лидеров</button>
+      <button class="menu-btn sm ghost" onclick="hideModal();api('reset').then(poll)">Новая игра</button>
+    </div>
+    <div id="go-table" hidden></div>`;
   $("overlay").classList.remove("hidden");
+}
+function saveScore() {
+  const name = ($("go-name").value.trim() || "Диспетчер").slice(0, 16);
+  localStorage.setItem("mcs_name", name);
+  leaderSave(name);
+  $("go-table").hidden = false;
+  $("go-table").innerHTML = `<div class="menu-title">Таблица лидеров</div>` + leaderTableHtml();
+  const btn = $("go-save");
+  btn.disabled = true;
+  btn.textContent = "Результат записан ✓";
 }
 function showModal(html) { $("modal").innerHTML = html; $("overlay").classList.remove("hidden"); }
 function hideModal() { $("overlay").classList.add("hidden"); }
 
-/* -------- главное меню / настройки / лидеры -------- */
+/* -------- таблица лидеров -------- */
 const MENU_STORAGE = "mcs_scores";
-function menuShow() { $("menu").classList.remove("hidden"); api("pause", { on: true }); }
-function menuHide() { $("menu").classList.add("hidden"); api("pause", { on: false }); }
-function menuScreen(which) {
-  ["menu-screen", "menu-settings-screen", "menu-scores-screen"].forEach((id) => $(id).classList.toggle("hidden", id !== which));
-}
-function leaderSave(d) {
+function leaderSave(name) {
   try {
-    const name = (localStorage.getItem("mcs_name") || "Диспетчер").trim() || "Диспетчер";
+    const d = state.data;
     const score = d.credits + d.rating * 30;
     const list = JSON.parse(localStorage.getItem(MENU_STORAGE) || "[]");
     list.push({ name, score, rating: d.rating, done: d.total_done, day: d.time.day, ts: Date.now() });
@@ -527,35 +539,17 @@ function leaderSave(d) {
     localStorage.setItem(MENU_STORAGE, JSON.stringify(list.slice(0, 10)));
   } catch { /* localStorage недоступен */ }
 }
-function leaderRender() {
-  const box = $("menu-scores-list");
+function leaderTableHtml() {
   try {
     const list = JSON.parse(localStorage.getItem(MENU_STORAGE) || "[]");
-    if (!list.length) { box.innerHTML = `<div class="menu-empty">Пока нет результатов. Заверши партию — и появишься здесь!</div>`; return; }
-    box.innerHTML = `<table class="scores"><tr><th>#</th><th>Пилот</th><th>Итог</th><th>Рейтинг</th><th>Доставок</th></tr>` +
+    if (!list.length) return `<div class="menu-empty">Пока нет результатов. Заверши партию — и появишься здесь!</div>`;
+    return `<table class="scores"><tr><th>#</th><th>Пилот</th><th>Итог</th><th>Рейтинг</th><th>Доставок</th></tr>` +
       list.map((e, i) => `<tr><td>${i + 1}</td><td>${e.name}</td><td><b>${e.score}$</b></td><td>${e.rating}</td><td>${e.done}</td></tr>`).join("") +
       `</table>`;
-  } catch { box.innerHTML = `<div class="menu-empty">—</div>`; }
+  } catch { return `<div class="menu-empty">—</div>`; }
 }
-function initMenu() {
-  $("menu-play").addEventListener("click", () => {
-    const s = $("menu-name").value.trim();
-    if (s) localStorage.setItem("mcs_name", s);
-    menuHide(); poll();
-  });
-  $("menu-settings").addEventListener("click", () => {
-    $("menu-name").value = localStorage.getItem("mcs_name") || "";
-    menuScreen("menu-settings-screen");
-  });
-  $("menu-settings-ok").addEventListener("click", () => {
-    const s = $("menu-name").value.trim();
-    if (s) localStorage.setItem("mcs_name", s);
-    menuScreen("menu-screen");
-  });
-  $("menu-settings-back").addEventListener("click", () => menuScreen("menu-screen"));
-  $("menu-scores").addEventListener("click", () => { leaderRender(); menuScreen("menu-scores-screen"); });
-  $("menu-scores-back").addEventListener("click", () => menuScreen("menu-screen"));
-  menuShow();
+function showLeaders() {
+  showModal(`<h2>🏆 Таблица лидеров</h2>${leaderTableHtml()}<button onclick="hideModal()">Закрыть</button>`);
 }
 
 /* -------- кнопки -------- */
@@ -578,8 +572,7 @@ $("btn-reset").addEventListener("click", async () => {
   if (confirm("Начать заново?")) { await api("reset"); poll(); }
 });
 
-initMenu(); // ?noMenu=1 — пропустить главное меню (для скриншотов/тестов)
-if (location.search.includes("noMenu")) menuHide();
+$("btn-leaders").addEventListener("click", showLeaders);
 poll();
 setInterval(poll, 800);
 
